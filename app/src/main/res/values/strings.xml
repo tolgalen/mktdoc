@@ -170,4 +170,7 @@
     <string name="lic_jsoup">Análisis y limpieza del HTML del manual.</string>
     <string name="lic_pdfbox">Unión de los bloques del PDF, marcadores y numeración de páginas.</string>
     <string name="lic_mikrotik">La documentación y el changelog que se descargan son contenido con copyright de MikroTik. La app no los incluye: los descarga para uso personal, respetando el robots.txt del sitio.</string>
+    <string name="about_contact">Contacto y código</string>
+    <string name="about_email">Correo electrónico</string>
+    <string name="about_source">Código fuente (GitHub)</string>
 </resources>

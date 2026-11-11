@@ -202,12 +202,38 @@ private fun AlertsGroup(vm: MainViewModel) {
     }
 }
 
+private const val CONTACT_EMAIL = "candion@gmail.com"
+private const val SOURCE_URL = "https://github.com/tolgalen/mktdoc"
+
+@Composable
+private fun ContactRow(icon: ImageVector, label: String, value: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable(onClick = onClick).padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(16.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
 @Composable
 private fun AboutGroup() {
     var showGpl by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
+    fun open(intent: Intent) { runCatching { ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
     SectionCard(stringResource(R.string.about)) {
         Text("mktdoc ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
         Text(stringResource(R.string.about_text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    SectionCard(stringResource(R.string.about_contact)) {
+        ContactRow(Icons.Filled.Email, stringResource(R.string.about_email), CONTACT_EMAIL) {
+            open(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$CONTACT_EMAIL")))
+        }
+        ContactRow(Icons.Filled.Code, stringResource(R.string.about_source), SOURCE_URL.removePrefix("https://")) {
+            open(Intent(Intent.ACTION_VIEW, Uri.parse(SOURCE_URL)))
+        }
     }
     SectionCard(stringResource(R.string.license_title)) {
         Text(stringResource(R.string.license_gpl_summary), style = MaterialTheme.typography.bodyMedium)
