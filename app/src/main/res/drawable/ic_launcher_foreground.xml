@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Document with text lines and a download arrow. Safe zone: circle of radius 33; scaled to 80 %. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.8" android:scaleY="0.8" android:pivotX="54" android:pivotY="54">
+        <path android:fillColor="#E8EDF3" android:pathData="M33,26 L60,26 L72,38 L72,82 L33,82 Z" />
+        <path android:fillColor="#B7C2CF" android:pathData="M60,26 L60,38 L72,38 Z" />
+        <path android:strokeColor="#51606F" android:strokeWidth="2.2" android:strokeLineCap="round" android:pathData="M39,44 L58,44 M39,51 L66,51 M39,58 L66,58" />
+        <path android:fillColor="#EB5F27" android:pathData="M50,62 L58,62 L58,70 L64,70 L54,80 L44,70 L50,70 Z" />
+    </group>
+</vector>

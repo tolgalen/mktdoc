@@ -1,0 +1,408 @@
+# mktdoc
+
+Android app (10 and later) to **browse the MikroTik RouterOS manual offline**, in any of its published
+versions. It is the mobile counterpart of the desktop tool `mktdoc-downloader`: it reads
+<https://manual.mikrotik.com>, keeps a local HTML copy of the version you choose, tells you what changed
+online, and can export the documentation to a ZIP or a PDF.
+
+<p align="center">
+  <img src="docs/screenshots/home.png" width="230" alt="Versions list">
+  <img src="docs/screenshots/version.png" width="230" alt="Version screen">
+  <img src="docs/screenshots/reader_page.png" width="230" alt="Offline reader">
+</p>
+
+## Contents
+
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [How it works (user view)](#how-it-works-user-view)
+- [Architecture](#architecture)
+  - [Overview](#overview) · [Packages](#packages) · [Data on disk](#data-on-disk)
+  - [Discovery](#discovery-of-versions-and-structure) · [Download](#download-pipeline) · [Offline site](#offline-html-site)
+  - [Checking for changes](#checking-for-changes-and-updating) · [Retired versions](#retired-versions)
+  - [Changelog](#the-documentation-changelog) · [ZIP export](#zip-export) · [PDF export](#pdf-export)
+  - [Long operations](#long-operations-and-notifications) · [UI, state and theming](#ui-state-and-theming)
+- [Build and test](#build-and-test)
+- [Design notes and limitations](#design-notes-and-limitations)
+- [License](#license)
+
+## Features
+
+- **Versions**: detects every published version (7.26, 7.25, 7.24…) and lets you pick one. The last known list
+  is kept, so the app also starts without a connection.
+- **Offline HTML copy**: pages, images and CSS are downloaded and turned into a navigable site with an index,
+  **full-text search**, previous/next navigation and light/dark mode.
+- **In-app reader** (WebView) that follows the app theme and has a **font size** selector (80 – 175 %).
+- **Check differences with the website**: reads the online version again and compares it with your copy
+  (new, modified and removed pages, with the changed lines). Nothing is applied until you confirm.
+- **Retired versions**: if a version you downloaded is no longer published, the app warns you (banner and
+  notification, with an optional daily background check) and keeps your copy.
+- **Documentation changelog** (<https://manual.mikrotik.com/changelog>) as one more downloadable item.
+- **ZIP export** of the offline copy (a self-contained site, `index.html` at the root).
+- **PDF export of the online version** with the same options as the desktop app: sections and subsections,
+  one file or one per section, cover title and image, image quality, text size and page breaks. The PDF has a
+  cover, a contents page with page numbers, bookmarks and a footer with the section and page number.
+- **Themes** like the rest of my apps: System, Dark, Dark blue, Black (OLED) and Light, plus 8 color palettes
+  (mktdoc, Material Design, Ocean, Forest, Violet, Amber, Rose, Slate) and Material You dynamic colors.
+- English and Spanish interface (per-app language), settings grouped by category, open-source license screen.
+- Polite to the server: honors `robots.txt`, caps requests per second (adjustable) and retries 429/5xx.
+
+## Screenshots
+
+### Versions and downloading
+
+| Versions | Version screen | Downloading |
+|---|---|---|
+| <img src="docs/screenshots/home.png" width="230"> | <img src="docs/screenshots/version.png" width="230"> | <img src="docs/screenshots/download_progress.png" width="230"> |
+
+The list shows the online versions and the documentation changelog; each card says whether an offline copy
+exists. The version screen is a grid of actions. Long operations run in a foreground service and show a
+progress dialog (it can be hidden or cancelled).
+
+### Reading offline
+
+| Index and search | Page | Font size |
+|---|---|---|
+| <img src="docs/screenshots/reader_search.png" width="230"> | <img src="docs/screenshots/reader_page.png" width="230"> | <img src="docs/screenshots/reader_font.png" width="230"> |
+
+### Checking for changes
+
+| Result | Changes report |
+|---|---|
+| <img src="docs/screenshots/check_result.png" width="230"> | <img src="docs/screenshots/changes.png" width="230"> |
+
+The report lists new, modified and removed pages. A modified page expands to the lines that changed
+(red = removed, green = added). You can apply the changes (optionally deleting pages that no longer exist
+online) or discard them.
+
+### Documentation changelog
+
+| Changelog | Entries grouped by month |
+|---|---|
+| <img src="docs/screenshots/changelog_version.png" width="230"> | <img src="docs/screenshots/changelog_index.png" width="230"> |
+
+### PDF export
+
+| Options | Sections | Done |
+|---|---|---|
+| <img src="docs/screenshots/pdf_options.png" width="230"> | <img src="docs/screenshots/pdf_sections.png" width="230"> | <img src="docs/screenshots/pdf_done.png" width="230"> |
+
+Cover, contents with page numbers, and content pages with the section name and page number in the footer
+(generated by the app on the emulator, "Container" section of 7.26):
+
+![PDF pages](docs/screenshots/pdf_pages.png)
+
+### Settings, themes and licenses
+
+| Settings | Appearance | Reading |
+|---|---|---|
+| <img src="docs/screenshots/settings.png" width="230"> | <img src="docs/screenshots/settings_appearance.png" width="230"> | <img src="docs/screenshots/settings_reading.png" width="230"> |
+
+| Licenses | GPL text |
+|---|---|
+| <img src="docs/screenshots/licenses.png" width="230"> | <img src="docs/screenshots/license_gpl.png" width="230"> |
+
+Dark, Dark blue and Light (with the Ocean palette):
+
+![Themes](docs/screenshots/themes.png)
+
+## How it works (user view)
+
+1. **Open the app.** It lists the versions published on the website. Tap the refresh icon to reload the list.
+   Without a connection it shows the last known list.
+2. **Pick a version** and press **Download as HTML**. The app reads the manual structure, downloads every page
+   with its images and builds the offline site. A foreground notification shows the progress.
+3. **Open documentation** to read it in the app. The **index** page has a search box (full text, all words must
+   match) and the whole table of contents. Inside a page you have breadcrumbs and previous/next links, and the
+   **Tt** button changes the font size.
+4. **Check differences with the website** to compare your copy with what is online. Review the report, then
+   *Apply changes* or *Discard*. If the version has disappeared from the website you are told, and the copy is
+   kept.
+5. **Export copy to ZIP** to save the offline site as a file anywhere (the Android file picker is used).
+6. **Export to PDF (online)**: choose the options and the sections, then pick where to save the file (or a
+   folder when you want one file per section).
+7. **Settings** (gear icon) are grouped in *Appearance*, *Reading*, *Network and storage*, *Alerts*, *About* and
+   *Licenses*.
+
+## Architecture
+
+### Overview
+
+The app is a single Android module written in Kotlin with Jetpack Compose (Material 3). There is no database:
+everything is stored as plain files, and long operations are coroutines hosted by a foreground service.
+
+```mermaid
+flowchart LR
+    UI["ui/<br/>Compose screens + MainViewModel"] --> LIB
+    UI --> JOBS["work/Jobs<br/>foreground service"]
+    JOBS --> LIB["data/Library<br/>download · check · apply · zip"]
+    JOBS --> PDF["pdf/PdfExporter"]
+    LIB --> DISC["data/Discovery<br/>versions + structure"]
+    LIB --> CRAWL["data/Crawler<br/>download + clean + store"]
+    LIB --> SITE["data/SiteRenderer<br/>offline HTML site"]
+    PDF --> CRAWL
+    PDF --> IMG["pdf/ImageOptimizer"]
+    PDF --> PRINT["pdf/PdfPrinter<br/>WebView → PDF"]
+    PDF --> MERGE["PDFBox-Android<br/>merge, bookmarks, footer"]
+    DISC --> HTTP["net/Http<br/>OkHttp + rate limit"]
+    CRAWL --> HTTP
+    HTTP -.-> WEB[("manual.mikrotik.com")]
+    CRAWL --> STORE[("Store<br/>files on disk")]
+    SITE --> STORE
+    WORK["work/VersionCheckWorker<br/>daily"] --> LIB
+```
+
+### Packages
+
+| Package | Responsibility |
+|---|---|
+| `net` | `Http`: single OkHttp client with a global requests-per-second limiter, retries (429/5xx and network errors with growing back-off) and manual redirect handling (the site redirects to `http://`, which is forced back to `https://`). |
+| `data` | `Discovery` (versions, sidebar menu, sitemap, changelog structure), `Crawler` (download, clean, cache), `Store` (files on disk), `SiteRenderer` (offline HTML site), `Library` (download / check / apply / ZIP / availability), `Model` (nodes, structure, versions), `Prefs`, `Licenses`. |
+| `pdf` | `PdfOptions`, `ImageOptimizer`, `PdfPrinter` (prints HTML with the WebView), `PdfExporter` (assembles, prints, merges and decorates the PDF). |
+| `work` | `Jobs` (single long-running operation exposed as a `StateFlow` + the foreground `JobService`) and `VersionCheckWorker` (WorkManager, daily). |
+| `ui` | Compose screens (`Screens`, `PdfScreen`, `ReaderScreen`, `SettingsScreen`), shared components, `MainViewModel`, and `theme/` (color schemes, shapes). |
+| `android.print` | `PrintCallbacks.java`: tiny Java shim, see [PDF export](#pdf-export). |
+
+### Data on disk
+
+Each downloaded version lives in its own folder under the app's private storage (`filesDir/docs/<label>/`).
+The changelog uses the label `changelog`.
+
+```
+docs/<label>/
+├── meta.json         label, prefix, download/check times, page count, size, "removed online" flag, pending changes
+├── structure.json    the manual tree (sections, categories, pages) with their paths
+├── manifest.json     per page: key, title, SHA-1 of its visible text, ETag, Last-Modified, timestamp, file name
+├── raw/              cleaned <article> HTML of every page (images as @ASSETS@/img/… placeholders)
+├── site/             the generated offline site (what the reader and the ZIP use)
+│   ├── index.html    table of contents + full-text search
+│   ├── <pages>.html  one file per page, same folder layout as the website
+│   └── assets/       site.css, img/, res/ (fonts, icons), search-index.js
+└── staging/          only while a check has unapplied changes: new/modified pages + report.json
+```
+
+The PDF export keeps its own page cache in `filesDir/pdfcache/<label>/` (same layout without `site/`), and the
+structure used by the PDF section picker is cached in `cacheDir/structures/`.
+
+### Discovery of versions and structure
+
+`Discovery` reads the website's Docusaurus markup:
+
+- **Versions**: `/docs/introduction` contains the version dropdown (`/docs/7.25/introduction`…) and the
+  `docusaurus_version` meta tag with the current one. The current version lives at `/docs`, the others at
+  `/docs/<version>`. The result is cached in `filesDir/versions.json`.
+- **Structure**: the sidebar `ul.theme-doc-sidebar-menu` is parsed into a tree of `Node`s. The sidebar only
+  comes expanded for the active branch, so each *category* page is read to learn its children
+  (`expandMenus`, first level when choosing sections; the crawler discovers deeper levels while downloading).
+- **Pages not in the menu**: the current version's `sitemap.xml` (or `llms.txt` as a fallback) lists them and
+  they are added to the tree. Older versions have no sitemap, so the current version's paths are translated
+  to the old prefix and probed (HTTP 200) to see which ones exist.
+- Links found inside pages that are in neither the menu nor the sitemap are attached under their nearest known
+  ancestor (`attachDiscovered`) and dropped if they turn out not to be pages.
+
+### Download pipeline
+
+`Library.download` → `Discovery.loadStructure` → `Crawler.run` → `SiteRenderer.render`.
+
+`Crawler` downloads the pages concurrently (6 coroutines, bounded by a semaphore) while the global limiter
+keeps the whole app under the configured requests per second (default 10, adjustable 2 – 20). For each page:
+
+1. `robots.txt` is honored (`Disallow` of the `*` group; `Crawl-delay` lowers the rate).
+2. If a previous copy exists, a conditional request is made (`If-None-Match` / `If-Modified-Since`); a `304`
+   reuses the stored page. When the server sends no validators the page is downloaded again and compared by
+   content.
+3. The `<article>` (or `<main>`) is extracted and **cleaned**: scripts, buttons, pagination and permalinks are
+   removed, tab panels are expanded with their labels, collapsed `<details>` are opened, images are downloaded
+   to `assets/img/` (file name = SHA-1 of the URL, so they are shared and cached) and replaced by
+   `@ASSETS@/` placeholders, and internal links are tagged with `data-mk-key` / `data-mk-frag`.
+4. A **hash** of the normalized visible text (one line per block) is stored; it is what later tells whether a
+   page changed.
+5. Category pages also yield their menu, which is merged into the tree (official order and titles); new nodes
+   are queued, so the whole manual is found while downloading.
+
+Network errors that survive the HTTP client's own retries are retried twice more per page; 404/410 mark a page
+as gone, other failures are reported and, if a previous copy existed, it is kept.
+
+The site stylesheet is downloaded once, and the `url(…)` references in it (fonts, icons) are rewritten to local
+files.
+
+### Offline HTML site
+
+`SiteRenderer` turns `raw/` into `site/`:
+
+- Files mirror the website path (`/docs/wireless/wifi` → `wireless/wifi.html`, or `…/index.html` when the page
+  has children). Placeholders become relative `assets/` paths and links tagged with `data-mk-key` are
+  rewritten to relative links to the local file (links to anything else stay as web links).
+- Each page gets a top bar (index, search box, theme toggle), breadcrumbs, previous/next links and the
+  Docusaurus stylesheet. The theme script runs in `<head>` before the first paint: forced theme (the app sets
+  it from the reader), saved choice, or the system preference.
+- `index.html` has the nested table of contents and the **search**: an inverted index
+  (`assets/search-index.js`, base-36 posting lists) loaded with a plain `<script>`, so it also works from
+  `file://`. All query words must match (the last one as a prefix); pages whose title matches rank first.
+- A version that was published at `/docs` and later moved to `/docs/<version>` keeps working: the renderer
+  accepts every prefix the version has been known under.
+
+The reader is a `WebView` pointed at `file://…/site/index.html`. The app theme is injected (`window.MK_FORCE`
+and `data-theme`), external links open in the browser and the font size is `WebSettings.textZoom`.
+
+### Checking for changes and updating
+
+`Library.check(label)` (not applying anything):
+
+1. If the version now lives under a different prefix (e.g. it was `/docs` and a newer release moved it to
+   `/docs/7.26`), the stored data is **migrated** to the new prefix first.
+2. The stored structure is loaded; categories are marked as "not expanded" so their menus are read again, and
+   new pages from the sitemap are added (current version only).
+3. `Crawler` runs against the stored copy but **writes into `staging/`**. It reports `added` (not in the
+   manifest), `modified` (hash differs), `gone` (404/410) and `failed`.
+4. For every modified page a line diff is computed between the stored and the new text. The result is saved
+   as `staging/report.json` and shown in the *Changes* screen.
+
+`Library.apply` moves the staged pages into `raw/`, merges the manifest (optionally removing the gone pages and
+their nodes), garbage-collects unreferenced files, re-renders the site and updates `meta.json`.
+`discardPending` just deletes `staging/`.
+
+### Retired versions
+
+A version counts as retired when the website does not list it any more **and** its introduction page is gone (or
+its old `/docs` prefix now serves another version); the double check avoids false alarms. `Library.refreshAvailability` runs when the app opens or the list is
+refreshed, and `VersionCheckWorker` (WorkManager, once a day, only with network) runs the same check in the
+background and posts a notification. The flag is stored in `meta.json`, so the banner, the card chip and the
+version screen keep showing it. The offline copy is never deleted automatically, and *Check differences* on it just reports that the version is no
+longer online. The changelog is excluded from this check.
+
+### The documentation changelog
+
+`https://manual.mikrotik.com/changelog` is a Docusaurus *blog* (one post per working day, plus archive, tags
+and authors pages), not a versioned manual. It is modeled as a special version with label `changelog` and
+prefix `/changelog`, so it reuses the whole pipeline (download, offline site and search, check, apply, ZIP and
+PDF):
+
+- `Discovery.loadChangelogStructure` reads the sitemap, groups the posts by month (newest first) and appends
+  the archive, tags and authors pages. Post titles are replaced by the page's `<h1>` after downloading.
+- `refreshChangelog` adds new posts to the stored tree when checking for differences.
+- Pagination pages (`/changelog/page/N`) and the blog at `/blog` are not downloaded.
+
+### ZIP export
+
+`Library.exportZip` streams every file of `site/` into a `ZipOutputStream` writing to a URI chosen with the
+Storage Access Framework (`CreateDocument`). Entries live under `mktdoc-<label>/`, so unzipping it gives a
+folder that opens by double-clicking `index.html`.
+
+### PDF export
+
+`PdfExporter` exports the **online** version (it works without an offline copy):
+
+1. **Pages**: the chosen sections are downloaded with the same `Crawler`, into the PDF cache
+   (`filesDir/pdfcache/<label>`), and reused for 7 days without a request.
+2. **Images**: `ImageOptimizer` rescales and re-encodes them according to the quality option (*Optimized*: max.
+   1400 px, JPEG 82; *Smallest*: 1000 px, JPEG 65; *Original*: untouched). PNG/WebP become JPEG, transparency
+   is flattened onto white, SVG is untouched.
+3. **Layout**: for every output file ("group") the pages are put in order and split into **blocks** (at most
+   80 pages, and a block starts at every sheet break of the chosen *page breaks* mode). Each block is one HTML
+   file using the site's CSS plus a print stylesheet (tighter spacing, code wrapped, no shadows, images capped
+   in height, `zoom` for the *text size* option, `break-before: page` for the breaks).
+4. **Printing**: `PdfPrinter` loads each block in an off-screen `WebView` and prints it with the framework's
+   `PrintDocumentAdapter` **without showing a print dialog**. The adapter callbacks have non-public
+   constructors, so a small shim in the `android.print` package (`PrintCallbacks.java`) subclasses them.
+   A4 is requested with no margins; the page margins come from CSS `@page`.
+5. **Locating pages**: every manual page starts with a tiny, almost white marker (`MKP<index>X`). After a block
+   is printed, PDFBox's text stripper finds on which sheet each marker is, giving the sheet where every manual
+   page starts.
+6. **Contents**: printed twice. The first pass has placeholder numbers to learn how many sheets the contents
+   need, the second one has the real numbers (cover + contents sheets + position of the page).
+7. **Merge and finish** (PDFBox-Android): cover, contents and blocks are merged; every sheet gets a footer with
+   its section and page number; a hierarchical outline (bookmarks) is added; the file is written to the
+   destination chosen with the Storage Access Framework (one document, or one per section in a chosen folder).
+   If anything fails, the empty file created by the picker is deleted.
+
+Options (same as the desktop app): layout (single file / one per section), cover title and image, image quality,
+text size (extra small 70.7 %, small 85 %, normal), page breaks (continuous, new sheet per section, per section
+and subsection, each page) and the sections or subsections to include.
+
+### Long operations and notifications
+
+`Jobs` allows one long operation at a time (download, check, apply, ZIP, PDF). `Jobs.start` launches it in an
+application-scoped coroutine and starts `JobService`, a foreground service (type `dataSync`) that shows an
+ongoing notification with progress and a *Cancel* action. The state (`running`, phase, `done/total`, last log
+lines, message or error) is a `StateFlow`, collected by the Compose `JobDialog`. When a job ends the service
+posts a result notification and stops. Operations report progress through a small `Reporter` object (`log`,
+`progress(phase, done, total)`).
+
+### UI, state and theming
+
+- `MainViewModel` holds the version lists, the local copies and the PDF section tree, and starts the jobs.
+  User-visible texts built there use a context localized with the per-app language, because the application
+  context does not follow it by itself.
+- Navigation is a tiny back stack of route strings (`home`, `version:7.26`, `changes:7.26`, `pdf:7.26`,
+  `reader:7.26`, `settings`) saved with `rememberSaveable`.
+- Settings are a list of categories; each opens a sub-page (back returns to the list).
+- **Theming**: `ThemeMode` (System, Dark, Dark blue, Black, Light) × `ThemePalette` (mktdoc, Material Design,
+  Ocean, Forest, Violet, Amber, Rose, Slate), plus Material You dynamic colors on Android 12+. Dark blue and
+  Black have fixed schemes; the generated palettes derive their light and dark schemes from a seed color.
+  Shapes are slightly rounded (2 – 8 dp) and the action buttons are laid out in a grid.
+- The app uses `AppCompatActivity` so the per-app language works on all supported versions.
+
+## Build and test
+
+Requirements: the Android SDK with platform 37 and network access the first time to fetch dependencies. The Gradle
+wrapper is used; the Gradle daemon JVM is configured as JDK 25 (auto-provisioned) and the code targets Java 17.
+
+```
+./gradlew assembleDebug            # app/build/outputs/apk/debug/mktdoc-v1.0.0-debug.apk
+./gradlew testDebugUnitTest        # unit tests
+./gradlew assembleRelease          # release APK (minified); signed when keystore.properties exists
+```
+
+For a signed release copy `keystore.properties.example` to `keystore.properties` and fill it in (it is
+git-ignored). `minSdk` is 29 (Android 10), `targetSdk` 36.
+
+Dependencies: Jetpack Compose + Material 3, AndroidX (activity, lifecycle, appcompat, WorkManager), OkHttp,
+jsoup, PDFBox-Android and kotlinx.coroutines. The unit tests (`app/src/test`) cover version comparison, path
+normalization, the local file mapping and relative links, the Docusaurus menu parser, structure
+serialization and the text hash used to detect changes.
+
+## Design notes and limitations
+
+- **No database.** Plain files make the offline copy trivially exportable and inspectable.
+- **Whole versions only** are downloaded to the offline copy (sections can be chosen for the PDF). A download
+  that is cancelled halfway leaves the previous copy untouched; the next attempt downloads the pages again
+  (images already on disk are reused).
+- **Change detection is by content hash** of the page's visible text, so cosmetic differences in the markup do
+  not count as changes, and neither do changed images.
+- **PDF links**: links between manual pages in the PDF point to the website, not to pages inside the PDF; the
+  contents page and bookmarks are the navigation. A page that starts at the very bottom of a sheet can show a
+  contents number one sheet off.
+- **Memory/time**: very large PDFs (thousands of pages) are slow on a phone and PDFBox keeps temporary files;
+  choose *one file per section* for the complete manual.
+- Progress messages in the job dialog are in English; the rest of the interface follows the app language.
+- The app is independent and **not endorsed by MikroTik**. The documentation is MikroTik's content, downloaded
+  for personal use.
+
+## License
+
+Copyright © 2026 tolgalen
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General
+Public License as published by the Free Software Foundation, either version 3 of the License, or (at your
+option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
+implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+more details.
+
+You should have received a copy of the GNU General Public License along with this program. If not, see
+<https://www.gnu.org/licenses/>. The full text is in [LICENSE](LICENSE).
+
+Third-party components (also shown in the app under *Settings › Licenses*):
+
+| Component | License |
+|---|---|
+| Jetpack Compose, Material 3, AndroidX, WorkManager | Apache 2.0 |
+| Kotlin, kotlinx.coroutines | Apache 2.0 |
+| OkHttp, Okio | Apache 2.0 |
+| jsoup | MIT |
+| PDFBox-Android (port of Apache PDFBox) | Apache 2.0 |
+
+The documentation and changelog downloaded by the app are copyrighted content of MikroTik (SIA Mikrotikls) and are
+not part of this repository.

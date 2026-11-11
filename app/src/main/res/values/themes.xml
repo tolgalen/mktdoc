@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.Mktdoc" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">#14181C</item>
+    </style>
+</resources>

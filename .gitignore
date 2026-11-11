@@ -1,0 +1,23 @@
+.gradle/
+build/
+/app/build/
+local.properties
+keystore.properties
+.kotlin/
+*.apk
+*.aab
+.idea/caches/
+.idea/workspace.xml
+.idea/libraries/
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+/app/release/
+
+# Android Studio files that change on every machine/session
+.idea/deploymentTargetSelector.xml
+.idea/deviceManager.xml
+.idea/caches/
+.idea/inspectionProfiles/
+.idea/misc.xml
