@@ -112,7 +112,31 @@ class Library(private val ctx: Context) {
 
     fun indexFile(label: String) = File(siteDir(label), "index.html")
 
-    fun delete(label: String) { dir(label).deleteRecursively() }
+    fun delete(label: String) { dir(label).deleteRecursively(); indexes.remove(label) }
+
+    private val indexes = HashMap<String, Pair<Long, SearchIndex?>>()
+
+    private fun searchIndex(label: String): SearchIndex? {
+        val f = File(siteDir(label), "assets/search-index.js")
+        if (!f.isFile) return null
+        val stamp = f.lastModified() xor f.length()
+        synchronized(indexes) {
+            indexes[label]?.let { if (it.first == stamp) return it.second }
+            val idx = SearchIndex.load(f)
+            indexes[label] = stamp to idx
+            return idx
+        }
+    }
+
+    /** Full-text search over the downloaded versions (all of them, or only [only]). */
+    suspend fun search(query: String, only: String? = null, limit: Int = 100): List<SearchHit> = withContext(Dispatchers.IO) {
+        listLocal().filter { only == null || it.label == only }.flatMap { v ->
+            searchIndex(v.label)?.search(query, v.label, limit) ?: emptyList()
+        }.sortedByDescending { it.score }.take(limit)
+    }
+
+    /** Free space (bytes) available for the app's data. */
+    fun freeSpace(): Long = android.os.StatFs(ctx.filesDir.absolutePath).availableBytes
 
     /** Report of the last check that is still waiting to be applied. */
     fun pendingReport(label: String): CheckReport? = try {
@@ -166,6 +190,7 @@ class Library(private val ctx: Context) {
     // ------------------------------------------------------------------ download
     suspend fun download(v: DocVersion, lang: String, rep: Reporter): LocalVersion {
         val dir = dir(v.label)
+        if (freeSpace() < MIN_FREE_BYTES) throw java.io.IOException("Not enough free space (${freeSpace() / 1_000_000} MB). At least ${MIN_FREE_BYTES / 1_000_000} MB are needed.")
         dir.mkdirs()
         rep.progress("structure", 0, 0)
         rep.log("Reading the structure of ${v.label}…")
@@ -343,4 +368,6 @@ class Library(private val ctx: Context) {
         }
         rep.progress("zip", files.size, files.size)
     }
+
+    companion object { const val MIN_FREE_BYTES = 400L * 1024 * 1024 }
 }

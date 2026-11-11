@@ -10,6 +10,15 @@ import com.tolgalen.mktdoc.pdf.TextSize
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+/** A page of an offline copy: [path] is relative to the version's `site/` folder. */
+data class PageRef(val label: String, val path: String, val title: String) {
+    fun toJson() = org.json.JSONObject().put("l", label).put("p", path).put("t", title)
+
+    companion object {
+        fun fromJson(o: org.json.JSONObject) = PageRef(o.getString("l"), o.getString("p"), o.optString("t"))
+    }
+}
+
 enum class ThemeMode { SYSTEM, DARK, NAVY, BLACK, LIGHT }
 
 /** Color palette: mktdoc's own, base Material Design, or one generated from a seed color. */
@@ -64,4 +73,43 @@ class Prefs(ctx: Context) {
             .putString("pdf_image", o.coverImage?.toString()).putString("pdf_quality", o.imageQuality.name)
             .putString("pdf_text", o.textSize.name).putString("pdf_breaks", o.breaks.name).apply()
     }
+
+    // ------------------------------------------------------------------ bookmarks and reading position
+    private fun readRefs(key: String): List<PageRef> = try {
+        val a = org.json.JSONArray(sp.getString(key, "[]"))
+        List(a.length()) { PageRef.fromJson(a.getJSONObject(it)) }
+    } catch (_: Exception) { emptyList() }
+
+    private fun writeRefs(key: String, v: List<PageRef>) =
+        sp.edit().putString(key, org.json.JSONArray().also { a -> v.forEach { a.put(it.toJson()) } }.toString()).apply()
+
+    private val _bookmarks = MutableStateFlow(readRefs("bookmarks"))
+    val bookmarks: StateFlow<List<PageRef>> = _bookmarks
+
+    fun isBookmarked(label: String, path: String) = _bookmarks.value.any { it.label == label && it.path == path }
+
+    fun toggleBookmark(ref: PageRef) {
+        val cur = _bookmarks.value
+        _bookmarks.value = if (cur.any { it.label == ref.label && it.path == ref.path })
+            cur.filterNot { it.label == ref.label && it.path == ref.path } else cur + ref
+        writeRefs("bookmarks", _bookmarks.value)
+    }
+
+    fun removeBookmarksOf(label: String) {
+        _bookmarks.value = _bookmarks.value.filter { it.label != label }
+        writeRefs("bookmarks", _bookmarks.value)
+        if (_recent.value.any { it.label == label }) { _recent.value = _recent.value.filter { it.label != label }; writeRefs("recent", _recent.value) }
+    }
+
+    /** Last pages read, newest first. */
+    private val _recent = MutableStateFlow(readRefs("recent"))
+    val recent: StateFlow<List<PageRef>> = _recent
+
+    fun pushRecent(ref: PageRef) {
+        if (ref.path == "index.html" || ref.title.isBlank()) return
+        _recent.value = (listOf(ref) + _recent.value.filterNot { it.label == ref.label && it.path == ref.path }).take(15)
+        writeRefs("recent", _recent.value)
+    }
+
+    fun clearRecent() { _recent.value = emptyList(); writeRefs("recent", emptyList()) }
 }

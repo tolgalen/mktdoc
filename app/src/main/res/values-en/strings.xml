@@ -173,4 +173,12 @@
     <string name="about_contact">Contact and source</string>
     <string name="about_email">Email</string>
     <string name="about_source">Source code (GitHub)</string>
+    <string name="bookmark">Bookmark</string>
+    <string name="bookmarks">Bookmarks</string>
+    <string name="continue_reading">Continue reading</string>
+    <string name="recent">Recently read</string>
+    <string name="search_in">Search in %1$s</string>
+    <string name="search_hint">Search the documentation…</string>
+    <string name="no_results">No results</string>
+    <string name="n_results">%1$d results</string>
 </resources>

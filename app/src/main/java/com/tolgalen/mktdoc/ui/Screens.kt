@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -48,7 +49,9 @@ fun versionTitle(label: String): String = if (label == CHANGELOG) stringResource
 private data class Row(val label: String, val online: DocVersion?, val local: LocalVersion?)
 
 @Composable
-fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Unit) {
+fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Unit, onSearch: () -> Unit, onPage: (PageRef) -> Unit) {
+    val recent by vm.prefs.recent.collectAsState()
+    val bookmarks by vm.prefs.bookmarks.collectAsState()
     val online by vm.online.collectAsState()
     val ok by vm.onlineOk.collectAsState()
     val loading by vm.loading.collectAsState()
@@ -61,6 +64,7 @@ fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Un
     }
     Scaffold(topBar = {
         TopAppBar(title = { Text(stringResource(R.string.app_name), fontWeight = FontWeight.Bold) }, actions = {
+            IconButton(onSearch, enabled = local.isNotEmpty()) { Icon(Icons.Default.Search, stringResource(R.string.search)) }
             IconButton({ vm.refresh() }, enabled = !loading) { Icon(Icons.Default.Refresh, stringResource(R.string.refresh)) }
             IconButton(onSettings) { Icon(Icons.Default.Settings, stringResource(R.string.settings)) }
         })
@@ -73,8 +77,30 @@ fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Un
             if (gone.isNotEmpty()) item {
                 Banner(stringResource(R.string.banner_gone, gone.joinToString(", ") { it.label }), Palette.bad)
             }
+            if (recent.isNotEmpty()) item {
+                SectionCard(stringResource(R.string.continue_reading)) {
+                    PageRow(recent.first(), Icons.Default.History, onPage)
+                }
+            }
+            if (bookmarks.isNotEmpty()) item {
+                SectionCard(stringResource(R.string.bookmarks)) {
+                    bookmarks.takeLast(8).reversed().forEach { PageRow(it, Icons.Default.Star, onPage) }
+                }
+            }
             if (rows.isEmpty() && !loading) item { Text(stringResource(R.string.no_versions), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(rows, key = { it.label }) { r -> VersionCard(r) { onOpen(r.label) } }
+        }
+    }
+}
+
+@Composable
+fun PageRow(r: PageRef, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: (PageRef) -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onClick(r) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(r.title.ifBlank { r.path }, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(versionTitle(r.label), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -107,7 +133,7 @@ private fun VersionCard(r: Row, onClick: () -> Unit) {
 }
 
 @Composable
-fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: () -> Unit, onChanges: () -> Unit, onPdf: () -> Unit) {
+fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: () -> Unit, onSearch: () -> Unit, onChanges: () -> Unit, onPdf: () -> Unit) {
     val online by vm.online.collectAsState()
     val ok by vm.onlineOk.collectAsState()
     val local by vm.local.collectAsState()
@@ -136,6 +162,7 @@ fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: 
             val tiles = buildList {
                 if (lv != null) {
                     add(Tile(stringResource(R.string.open_offline), Icons.AutoMirrored.Filled.MenuBook, onRead, primary = true))
+                    add(Tile(stringResource(R.string.search), Icons.Default.Search, onSearch))
                     if (lv.pendingChanges > 0) add(Tile(stringResource(R.string.view_changes, lv.pendingChanges), Icons.Default.Compare, onChanges))
                     add(Tile(stringResource(R.string.check_updates), Icons.Default.Sync, { vm.check(label) }, enabled = !busy && ok != false))
                     add(Tile(stringResource(R.string.export_zip), Icons.Default.FolderZip, { zipLauncher.launch("mktdoc-$label.zip") }, enabled = !busy))
@@ -253,4 +280,49 @@ fun JobDialog() {
         },
         dismissButton = { if (s.running) TextButton({ Jobs.cancel() }, shape = ButtonShape) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/** Full-text search over the downloaded versions (or one of them). */
+@Composable
+fun SearchScreen(vm: MainViewModel, only: String?, onBack: () -> Unit, onOpen: (PageRef) -> Unit) {
+    var q by rememberSaveable { mutableStateOf("") }
+    val hits by vm.hits.collectAsState()
+    val bookmarks by vm.prefs.bookmarks.collectAsState()
+    val recent by vm.prefs.recent.collectAsState()
+    LaunchedEffect(q, only) { vm.search(q, only) }
+    DisposableEffect(Unit) { onDispose { vm.search("") } }
+    Scaffold(topBar = {
+        TopAppBar(title = { Text(if (only != null) stringResource(R.string.search_in, versionTitle(only)) else stringResource(R.string.search)) },
+            navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } })
+    }) { pad ->
+        LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            item {
+                OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(stringResource(R.string.search_hint)) },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    trailingIcon = { if (q.isNotEmpty()) IconButton({ q = "" }) { Icon(Icons.Default.Clear, null) } })
+            }
+            if (q.trim().length < 2) {
+                if (bookmarks.isNotEmpty()) {
+                    item { Text(stringResource(R.string.bookmarks), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp)) }
+                    items(bookmarks.filter { only == null || it.label == only }.reversed(), key = { "b" + it.label + it.path }) { PageRow(it, Icons.Default.Star, onOpen) }
+                }
+                if (recent.isNotEmpty()) {
+                    item { Text(stringResource(R.string.recent), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp)) }
+                    items(recent.filter { only == null || it.label == only }, key = { "r" + it.label + it.path }) { PageRow(it, Icons.Default.History, onOpen) }
+                }
+            } else if (hits.isEmpty()) {
+                item { Text(stringResource(R.string.no_results), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            } else {
+                item { Text(stringResource(R.string.n_results, hits.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                items(hits, key = { it.label + it.path }) { h ->
+                    Column(Modifier.fillMaxWidth().clickable { onOpen(PageRef(h.label, h.path, h.title)) }.padding(vertical = 6.dp)) {
+                        Text(h.title, fontWeight = FontWeight.SemiBold)
+                        Text((if (only == null) "${versionTitle(h.label)} · " else "") + h.crumbs, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
 }

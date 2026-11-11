@@ -32,6 +32,8 @@ online, and can export the documentation to a ZIP or a PDF.
   is kept, so the app also starts without a connection.
 - **Offline HTML copy**: pages, images and CSS are downloaded and turned into a navigable site with an index,
   **full-text search**, previous/next navigation and light/dark mode.
+- **Native search** across every downloaded version (words match by prefix, title matches rank first), plus
+  **bookmarks** and a "continue reading" shortcut on the home screen.
 - **In-app reader** (WebView) that follows the app theme and has a **font size** selector (80 – 175 %).
 - **Check differences with the website**: reads the online version again and compares it with your copy
   (new, modified and removed pages, with the changed lines). Nothing is applied until you confirm.
@@ -74,6 +76,9 @@ progress dialog (it can be hidden or cancelled).
 The report lists new, modified and removed pages. A modified page expands to the lines that changed
 (red = removed, green = added). You can apply the changes (optionally deleting pages that no longer exist
 online) or discard them.
+
+> The "Changes report" screenshot was taken with deliberately altered local data (one page edited, one removed
+> and one deleted from the copy) so that the report would show all three kinds of change.
 
 ### Documentation changelog
 
@@ -351,8 +356,12 @@ wrapper is used; the Gradle daemon JVM is configured as JDK 25 (auto-provisioned
 ```
 ./gradlew assembleDebug            # app/build/outputs/apk/debug/mktdoc-v1.0.0-debug.apk
 ./gradlew testDebugUnitTest        # unit tests
+./gradlew lintDebug                # Android lint
 ./gradlew assembleRelease          # release APK (minified); signed when keystore.properties exists
 ```
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs the unit tests, lint and a debug build on every push
+and pull request. Downloads need at least 400 MB of free space.
 
 For a signed release copy `keystore.properties.example` to `keystore.properties` and fill it in (it is
 git-ignored). `minSdk` is 29 (Android 10), `targetSdk` 36.
@@ -360,7 +369,7 @@ git-ignored). `minSdk` is 29 (Android 10), `targetSdk` 36.
 Dependencies: Jetpack Compose + Material 3, AndroidX (activity, lifecycle, appcompat, WorkManager), OkHttp,
 jsoup, PDFBox-Android and kotlinx.coroutines. The unit tests (`app/src/test`) cover version comparison, path
 normalization, the local file mapping and relative links, the Docusaurus menu parser, structure
-serialization and the text hash used to detect changes.
+serialization, the text hash used to detect changes and the search index.
 
 ## Design notes and limitations
 

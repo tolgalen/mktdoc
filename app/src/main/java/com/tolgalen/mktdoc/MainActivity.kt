@@ -58,14 +58,19 @@ private fun App(vm: MainViewModel) {
     val kind = route.substringBefore(':')
     val arg = route.substringAfter(':', "")
     when (kind) {
-        "home" -> HomeScreen(vm, onOpen = { push("version:$it") }, onSettings = { push("settings") })
-        "version" -> VersionScreen(vm, arg, onBack = ::pop, onRead = { push("reader:$arg") }, onChanges = { push("changes:$arg") }, onPdf = { push("pdf:$arg") })
+        "home" -> HomeScreen(vm, onOpen = { push("version:$it") }, onSettings = { push("settings") }, onSearch = { push("search:") },
+            onPage = { r -> push("reader:${r.label}|${r.path}") })
+        "version" -> VersionScreen(vm, arg, onBack = ::pop, onRead = { push("reader:$arg") }, onSearch = { push("search:$arg") }, onChanges = { push("changes:$arg") }, onPdf = { push("pdf:$arg") })
         "changes" -> ChangesScreen(vm, arg, onBack = ::pop)
         "pdf" -> PdfScreen(vm, arg, onBack = ::pop)
         "reader" -> {
             val zoom by vm.prefs.readerZoom.collectAsState()
-            ReaderScreen(arg, vm.library.indexFile(arg), zoom, vm.prefs::setReaderZoom, onBack = ::pop)
+            val bookmarks by vm.prefs.bookmarks.collectAsState()
+            val label = arg.substringBefore('|')
+            ReaderScreen(label, vm.library.indexFile(label), arg.substringAfter('|', "").ifEmpty { null }, zoom, vm.prefs::setReaderZoom,
+                bookmarks, vm.prefs::toggleBookmark, vm.prefs::pushRecent, onSearch = { push("search:$label") }, onBack = ::pop)
         }
+        "search" -> SearchScreen(vm, only = arg.ifEmpty { null }, onBack = ::pop, onOpen = { r -> push("reader:${r.label}|${r.path}") })
         "settings" -> SettingsScreen(vm, onBack = ::pop)
     }
 }

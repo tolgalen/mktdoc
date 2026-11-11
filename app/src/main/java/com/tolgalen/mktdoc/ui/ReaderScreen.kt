@@ -13,6 +13,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import com.tolgalen.mktdoc.data.PageRef
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,7 +32,14 @@ import java.io.File
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun ReaderScreen(label: String, index: File, zoom: Int, onZoom: (Int) -> Unit, onBack: () -> Unit) {
+fun ReaderScreen(
+    label: String, index: File, initialPath: String?, zoom: Int, onZoom: (Int) -> Unit,
+    bookmarks: List<PageRef>, onToggleBookmark: (PageRef) -> Unit, onVisit: (PageRef) -> Unit,
+    onSearch: () -> Unit, onBack: () -> Unit,
+) {
+    val siteDir = index.parentFile!!
+    var current by remember { mutableStateOf<PageRef?>(null) }
+    val starred = current?.let { c -> bookmarks.any { it.label == c.label && it.path == c.path } } == true
     var sizeMenu by remember { mutableStateOf(false) }
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val bg = MaterialTheme.colorScheme.background.toArgb()
@@ -52,10 +62,11 @@ fun ReaderScreen(label: String, index: File, zoom: Int, onZoom: (Int) -> Unit, o
                     )
                 }
             }
-            IconButton({ web?.loadUrl("file://" + index.absolutePath) }) { Icon(Icons.Default.Home, stringResource(R.string.index)) }
-            IconButton({ web?.loadUrl("file://" + index.absolutePath + "?q=") ; web?.evaluateJavascript("document.getElementById('sq')&&document.getElementById('sq').focus()", null) }) {
-                Icon(Icons.Default.Search, stringResource(R.string.search))
+            IconButton({ current?.let(onToggleBookmark) }, enabled = current != null) {
+                Icon(if (starred) Icons.Default.Star else Icons.Default.StarBorder, stringResource(R.string.bookmark))
             }
+            IconButton({ web?.loadUrl("file://" + index.absolutePath) }) { Icon(Icons.Default.Home, stringResource(R.string.index)) }
+            IconButton(onSearch) { Icon(Icons.Default.Search, stringResource(R.string.search)) }
         })
     }) { pad ->
         AndroidView<WebView>(modifier = Modifier.padding(pad).fillMaxSize(), factory = { ctx ->
@@ -73,6 +84,12 @@ fun ReaderScreen(label: String, index: File, zoom: Int, onZoom: (Int) -> Unit, o
 
                     override fun onPageFinished(view: WebView, url: String?) {
                         canGoBack = view.canGoBack()
+                        val rel = (url ?: "").substringBefore('#').substringBefore('?').removePrefix("file://")
+                            .removePrefix(siteDir.absolutePath).trimStart('/')
+                        if (rel.endsWith(".html")) {
+                            val ref = PageRef(label, rel, (view.title ?: "").substringBefore(" — "))
+                            current = ref; onVisit(ref)
+                        }
                         view.evaluateJavascript("document.documentElement.setAttribute('data-theme','$theme')", null)
                     }
 
@@ -84,7 +101,7 @@ fun ReaderScreen(label: String, index: File, zoom: Int, onZoom: (Int) -> Unit, o
                     }
                 }
                 web = this
-                loadUrl("file://" + index.absolutePath)
+                loadUrl("file://" + (initialPath?.let { File(siteDir, it).takeIf { f -> f.isFile } } ?: index).absolutePath)
             }
         }, update = { it.setBackgroundColor(bg); it.settings.textZoom = zoom }, onRelease = { it.destroy() })
     }

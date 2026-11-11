@@ -173,4 +173,12 @@
     <string name="about_contact">Contacto y código</string>
     <string name="about_email">Correo electrónico</string>
     <string name="about_source">Código fuente (GitHub)</string>
+    <string name="bookmark">Marcador</string>
+    <string name="bookmarks">Marcadores</string>
+    <string name="continue_reading">Continuar leyendo</string>
+    <string name="recent">Leídas recientemente</string>
+    <string name="search_in">Buscar en %1$s</string>
+    <string name="search_hint">Buscar en la documentación…</string>
+    <string name="no_results">Sin resultados</string>
+    <string name="n_results">%1$d resultados</string>
 </resources>

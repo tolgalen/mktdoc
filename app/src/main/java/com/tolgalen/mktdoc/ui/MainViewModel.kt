@@ -123,7 +123,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun discard(label: String) { library.discardPending(label); refreshLocal() }
 
-    fun delete(label: String) { library.delete(label); refreshLocal() }
+    fun delete(label: String) { library.delete(label); prefs.removeBookmarksOf(label); refreshLocal() }
+
+    // ------------------------------------------------------------------ search
+    private val _hits = MutableStateFlow<List<com.tolgalen.mktdoc.data.SearchHit>>(emptyList())
+    val hits: StateFlow<List<com.tolgalen.mktdoc.data.SearchHit>> = _hits
+    private var searchJob: kotlinx.coroutines.Job? = null
+
+    fun search(q: String, only: String? = null) {
+        searchJob?.cancel()
+        if (q.trim().length < 2) { _hits.value = emptyList(); return }
+        searchJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(200)
+            _hits.value = library.search(q, only)
+        }
+    }
 
     fun exportZip(label: String, uri: Uri) {
         Jobs.start(a, str(R.string.job_zip, label)) { rep ->
