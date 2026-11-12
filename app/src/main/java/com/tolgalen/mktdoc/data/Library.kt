@@ -391,11 +391,12 @@ class Library(private val ctx: Context) {
         val keys = st.roots.flatMap { r -> r.pages().toList() }.filter { it.key in s.manifest }.distinctBy { it.key }.map { it.key!! }
         val lm = SiteRenderer.localMap(st.version.prefix, keys)
         val have = keys.toHashSet()
+        val cats = SiteRenderer.categoryPages(st, have, lm)
         fun build(n: Node): OutlineNode? {
             val own = SiteRenderer.pageKeyOf(n, have)
             val kids = n.children.mapNotNull(::build)
             if (own == null && kids.isEmpty()) return null
-            return OutlineNode(n.title, own?.let { lm[it] }, kids)
+            return OutlineNode(n.title, if (n.key != null && n.key in cats) cats[n.key!!] else own?.let { lm[it] }, kids)
         }
         st.roots.mapNotNull(::build)
     }

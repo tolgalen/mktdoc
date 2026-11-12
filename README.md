@@ -313,7 +313,10 @@ the menu, category menus read while downloading, hash-based difference check, an
 Two details of that site shape the structure: each sidebar category links to its first product's page *and* lists
 that same product inside it, so the repeated entry keeps no key of its own (it would be a duplicate page) but its
 `href` still names a downloaded page, and the offline index and the reader's outline list it as a normal entry
-(`SiteRenderer.pageKeyOf`). The few `/hardware/tags` pages are part of the manual and are included (for the RouterOS
+(`SiteRenderer.pageKeyOf`). Because opening such a category would otherwise show only that first product, a page that
+lists all the products of the category (like the website's sidebar) is generated for each of them in `site/_cat/`
+(`SiteRenderer.categoryPages`); the offline index, the reader's outline and a link at the top of every product page
+point to it. The few `/hardware/tags` pages are part of the manual and are included (for the RouterOS
 docs the tag pages are skipped). When the renderer changes, a stamp file (`site/.render-version`) makes the app rebuild
 existing copies once at start, without downloading anything.
 

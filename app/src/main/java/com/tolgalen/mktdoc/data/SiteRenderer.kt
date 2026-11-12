@@ -20,7 +20,7 @@ class SiteLabels(val home: String, val search: String, val prev: String, val nex
 
 object SiteRenderer {
     /** Bumped when the generated site changes in a way that existing copies should be rebuilt (a hidden stamp file records it). */
-    const val RENDER_VERSION = 2
+    const val RENDER_VERSION = 4
     const val RENDER_STAMP = ".render-version"
 
     const val OFFLINE_CSS = """
@@ -116,15 +116,32 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
      */
     fun pageKeyOf(n: Node, have: Set<String>): String? = (n.key ?: n.href?.let { normPath(it) })?.takeIf { it in have }
 
+    /**
+     * Categories whose own page is their first product (the hardware guides): key -> path of a generated page that
+     * lists all the products of the category, like the website's sidebar does. Opening the category from the index
+     * shows that list instead of just the first product.
+     */
+    fun categoryPages(st: Structure, have: Set<String>, lm: Map<String, String>): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        for (r in st.roots) for (n in r.walk()) {
+            val k = n.key ?: continue
+            if (k !in have) continue
+            if (n.children.none { c -> c.key == null && c.href != null && normPath(c.href!!) == k }) continue
+            out[k] = "_cat/" + lm.getValue(k).replace('/', '-')
+        }
+        return out
+    }
+
     private fun hasPage(n: Node, have: Set<String>): Boolean = pageKeyOf(n, have) != null || n.children.any { hasPage(it, have) }
 
-    private fun treeHtml(nodes: List<Node>, lm: Map<String, String>, have: Set<String>): String {
+    private fun treeHtml(nodes: List<Node>, lm: Map<String, String>, have: Set<String>, cats: Map<String, String>): String {
         val sb = StringBuilder("<ul>")
         for (n in nodes) {
             if (!hasPage(n, have)) continue
-            val kids = treeHtml(n.children, lm, have)
+            val kids = treeHtml(n.children, lm, have, cats)
             val pk = pageKeyOf(n, have)
-            val label = if (pk != null) "<a href=\"${esc(lm.getValue(pk))}\">${esc(n.title)}</a>" else esc(n.title)
+            val target = if (n.key != null && n.key in cats) cats.getValue(n.key!!) else pk?.let { lm.getValue(it) }
+            val label = if (target != null) "<a href=\"${esc(target)}\">${esc(n.title)}</a>" else esc(n.title)
             sb.append(if (n.children.any { c -> hasPage(c, have) }) "<li><details><summary>$label</summary>$kids</details></li>" else "<li>$label</li>")
         }
         return sb.append("</ul>").toString()
@@ -150,6 +167,7 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
         val keys = order.map { it.key!! }
         val lm = localMap(st.version.prefix, keys)
         val have = keys.toHashSet()
+        val cats = categoryPages(st, have, lm)
         // links stored in the pages may carry the prefix the version had when it was downloaded
         val prefixes = (aliases + st.version.prefix).sortedByDescending { it.length }
         val byRel = keys.associateBy { k -> k.removePrefix(st.version.prefix).ifEmpty { "/" } }
@@ -175,14 +193,21 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
             html = aTag.replace(html) { m ->
                 val k = resolveKey(m.groupValues[1])
                 // a link to the section home (e.g. /changelog) goes to the site index
-                val target = k?.let { lm[it] } ?: if (prefixes.any { m.groupValues[1].trimEnd('/') == it }) "index.html" else null
+                // the article's own breadcrumb to a category with a generated list page goes to that list
+                val target = k?.let { if (it in cats && "breadcrumbs__link" in m.value) cats.getValue(it) else lm[it] }
+                    ?: if (prefixes.any { m.groupValues[1].trimEnd('/') == it }) "index.html" else null
                 if (target == null) m.value else {
                     val frag = fragAttr.find(m.value)?.groupValues?.get(1).orEmpty()
                     val href = relPath(path, target) + if (frag.isNotEmpty()) "#$frag" else ""
                     hrefAttr.replace(m.value) { "href=\"$href\"" }
                 }
             }
-            val crumb = n.ancestors().filter { it.title.isNotEmpty() }.joinToString(" › ") { esc(it.title) }
+            // breadcrumbs: a category that has a generated list page is a link to it
+            val chain = n.ancestors() + if (n.key in cats) listOf(n) else emptyList()
+            val crumb = chain.filter { it.title.isNotEmpty() }.joinToString(" › ") { a ->
+                val cp = a.key?.let { cats[it] }
+                if (cp != null) "<a href=\"${esc(relPath(path, cp))}\">${esc(a.title)}</a>" else esc(a.title)
+            }
             val prev = order.getOrNull(i - 1); val next = order.getOrNull(i + 1)
             fun pager(x: Node?, text: String, right: Boolean): String =
                 if (x == null) "<span></span>" else "<a href=\"${esc(relPath(path, lm.getValue(x.key!!)))}\"${if (right) " style=\"text-align:right\"" else ""}>${if (right) "" else "« "}${esc(text)}: ${esc(x.title)}${if (right) " »" else ""}</a>"
@@ -201,6 +226,30 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
             for (tk in (token.findAll(meta.title.lowercase()) + token.findAll(text)).map { it.value }.toSet()) inv.getOrPut(tk) { ArrayList() }.add(i)
             if (i % 50 == 0) progress(i, order.size)
         }
+        // category pages: the list of all the products of a category
+        fun entryTarget(c: Node): String? = if (c.key != null && c.key in cats) cats.getValue(c.key!!) else pageKeyOf(c, have)?.let { lm.getValue(it) }
+        fun catList(nodes: List<Node>, from: String): String {
+            val sb = StringBuilder("<ul>")
+            for (c in nodes) {
+                if (!hasPage(c, have)) continue
+                val t = entryTarget(c)
+                val label = if (t != null) "<a href=\"${esc(relPath(from, t))}\">${esc(c.title)}</a>" else esc(c.title)
+                val kids = if (c.children.any { hasPage(it, have) }) catList(c.children, from) else ""
+                sb.append("<li>$label$kids</li>")
+            }
+            return sb.append("</ul>").toString()
+        }
+        for ((k, path) in cats) {
+            val node = order.first { it.key == k }
+            val up = "../".repeat(path.count { it == '/' })
+            val sb = StringBuilder(head("${node.title} — $siteTitle", up, lang))
+            sb.append("<body><div class=\"mk-wrap\">").append(top(up, l))
+            sb.append("<div class=\"mk-page mk-index\"><h1>${esc(node.title)}</h1>").append(catList(node.children, path)).append("</div>")
+            sb.append("<div class=\"mk-foot\">${esc(siteTitle)} · ${esc(l.footer)}</div></div></body></html>")
+            val f = File(siteDir, path)
+            f.parentFile?.mkdirs()
+            f.writeText(sb.toString())
+        }
         // full-text search index (loaded with <script>, so it also works from file://)
         val limit = order.size * 0.9
         val invJson = JSONObject()
@@ -212,7 +261,7 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
         val idx = StringBuilder(head(siteTitle, "", lang))
         idx.append("<body><div class=\"mk-wrap\">").append(top("", l, searchBox = false))
         idx.append("<h1>${esc(siteTitle)}</h1><input id=\"sq\" type=\"search\" placeholder=\"${esc(l.filter)}\" autocomplete=\"off\"><div id=\"sr\"></div>")
-        idx.append("<div class=\"mk-index\">").append(treeHtml(st.roots, lm, have)).append("</div>")
+        idx.append("<div class=\"mk-index\">").append(treeHtml(st.roots, lm, have, cats)).append("</div>")
         idx.append("<div class=\"mk-foot\">${esc(l.footer)}</div></div>")
         idx.append("<script>window.MK_I18N=$i18n;</script><script src=\"assets/search-index.js\"></script><script>$SEARCH_JS</script></body></html>")
         File(siteDir, "index.html").writeText(idx.toString())

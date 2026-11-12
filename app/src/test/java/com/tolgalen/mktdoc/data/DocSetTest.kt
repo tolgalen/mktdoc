@@ -43,4 +43,18 @@ class DocSetTest {
         assertNull(SiteRenderer.pageKeyOf(Node("Folder"), have))
         assertNull(SiteRenderer.pageKeyOf(Node("Gone", "/hardware/gone", null), have))
     }
+
+    @Test fun categoryWhoseFirstProductIsItsOwnPageGetsAListPage() {
+        val cat = Node("Accessories", "/hardware/apa-1", "/hardware/apa-1")
+        cat.add(Node("APA-1", "/hardware/apa-1", null))
+        cat.add(Node("FTC21", "/hardware/ftc21", "/hardware/ftc21"))
+        val plain = Node("Container", "/docs/container", "/docs/container")     // a docs category has its own page
+        plain.add(Node("VETH", "/docs/container/veth", "/docs/container/veth"))
+        val st = Structure(hardwareVersion(), mutableListOf(cat, plain), emptyList())
+        val have = setOf("/hardware/apa-1", "/hardware/ftc21", "/docs/container", "/docs/container/veth")
+        val lm = SiteRenderer.localMap("", have.toList())
+        val pages = SiteRenderer.categoryPages(st, have, lm)
+        assertEquals(setOf("/hardware/apa-1"), pages.keys)
+        assertTrue(pages.getValue("/hardware/apa-1").startsWith("_cat/"))
+    }
 }
