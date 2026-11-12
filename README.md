@@ -411,8 +411,7 @@ wrapper is used; the Gradle daemon JVM is configured as JDK 25 (auto-provisioned
 ./gradlew assembleRelease          # release APK (minified); signed when keystore.properties exists
 ```
 
-A GitHub Actions workflow (`.github/workflows/ci.yml`) runs the unit tests, lint and a debug build on every push
-and pull request. Downloads need at least 400 MB of free space.
+Downloads need at least 400 MB of free space.
 
 For a signed release copy `keystore.properties.example` to `keystore.properties` and fill it in (it is
 git-ignored). `minSdk` is 29 (Android 10), `targetSdk` 36.
