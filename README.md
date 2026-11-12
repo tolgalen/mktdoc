@@ -310,6 +310,13 @@ pipeline unchanged: structure from the sidebar of `/hardware/` (`entryUrl`) plus
 the menu, category menus read while downloading, hash-based difference check, and the optional section download
 (each product category is a section). Links to the RouterOS docs stay web links.
 
+Two details of that site shape the structure: each sidebar category links to its first product's page *and* lists
+that same product inside it, so the repeated entry keeps no key of its own (it would be a duplicate page) but its
+`href` still names a downloaded page, and the offline index and the reader's outline list it as a normal entry
+(`SiteRenderer.pageKeyOf`). The few `/hardware/tags` pages are part of the manual and are included (for the RouterOS
+docs the tag pages are skipped). When the renderer changes, a stamp file (`site/.render-version`) makes the app rebuild
+existing copies once at start, without downloading anything.
+
 ### The documentation changelog
 
 `https://manual.mikrotik.com/changelog` is a Docusaurus *blog* (one post per working day, plus archive, tags

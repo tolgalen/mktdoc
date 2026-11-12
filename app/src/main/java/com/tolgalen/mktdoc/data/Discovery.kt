@@ -222,7 +222,8 @@ object Discovery {
         }
         val byKey = HashMap<String, Node>()
         for (r in st.roots) for (n in r.pages()) byKey[n.key!!] = n
-        val tags = "$prefix/tags"
+        // the tag pages of the RouterOS docs are not wanted; the hardware guides' few tag pages are part of that manual
+        val tags = if (st.version.label == HARDWARE) "$prefix/\u0000none" else "$prefix/tags"
         val orphans = ArrayList<Node>()
         for (loc in locs) {
             if (hostOf(loc) != HOST) continue

@@ -31,4 +31,16 @@ class DocSetTest {
         assertEquals("cap-ax.html", m["/hardware/cap-ax"])
         assertEquals("crs-series/index.html", m["/hardware/crs-series"])
     }
+
+    @Test fun menuEntryRepeatingItsCategoryPageStillPointsToThatPage() {
+        val have = setOf("/hardware/apa-1", "/hardware/ftc21")
+        val category = Node("Accessories", "/hardware/apa-1", "/hardware/apa-1")
+        val first = Node("APA-1", "/hardware/apa-1", null)          // same page, key dropped as a duplicate
+        val other = Node("FTC21", "/hardware/ftc21", "/hardware/ftc21")
+        assertEquals("/hardware/apa-1", SiteRenderer.pageKeyOf(category, have))
+        assertEquals("/hardware/apa-1", SiteRenderer.pageKeyOf(first, have))
+        assertEquals("/hardware/ftc21", SiteRenderer.pageKeyOf(other, have))
+        assertNull(SiteRenderer.pageKeyOf(Node("Folder"), have))
+        assertNull(SiteRenderer.pageKeyOf(Node("Gone", "/hardware/gone", null), have))
+    }
 }

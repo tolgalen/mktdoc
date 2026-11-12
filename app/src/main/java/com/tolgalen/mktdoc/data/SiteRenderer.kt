@@ -19,6 +19,10 @@ class SiteLabels(val home: String, val search: String, val prev: String, val nex
 }
 
 object SiteRenderer {
+    /** Bumped when the generated site changes in a way that existing copies should be rebuilt (a hidden stamp file records it). */
+    const val RENDER_VERSION = 2
+    const val RENDER_STAMP = ".render-version"
+
     const val OFFLINE_CSS = """
 :root{--mk-bg:#fff;--mk-fg:#1c1e21;--mk-muted:#606770;--mk-border:#dadde1;--mk-field:#ccd0d5;--mk-accent:#2e8555}
 [data-theme=dark]{--mk-bg:#1b1b1d;--mk-fg:#e3e3e3;--mk-muted:#a3a7ad;--mk-border:#3a3b3f;--mk-field:#4b4c51;--mk-accent:#25c2a0;color-scheme:dark}
@@ -105,13 +109,23 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
         return "../".repeat(f.size - i) + t.drop(i).joinToString("/")
     }
 
+    /**
+     * Downloaded page a menu entry points to. An entry whose page is already used by its category (the hardware guides'
+     * categories link to their first product, which is also listed inside them) has no key of its own but its `href`
+     * still names a downloaded page.
+     */
+    fun pageKeyOf(n: Node, have: Set<String>): String? = (n.key ?: n.href?.let { normPath(it) })?.takeIf { it in have }
+
+    private fun hasPage(n: Node, have: Set<String>): Boolean = pageKeyOf(n, have) != null || n.children.any { hasPage(it, have) }
+
     private fun treeHtml(nodes: List<Node>, lm: Map<String, String>, have: Set<String>): String {
         val sb = StringBuilder("<ul>")
         for (n in nodes) {
-            if (n.pages().none { it.key in have }) continue
+            if (!hasPage(n, have)) continue
             val kids = treeHtml(n.children, lm, have)
-            val label = if (n.key != null && n.key in have) "<a href=\"${esc(lm.getValue(n.key!!))}\">${esc(n.title)}</a>" else esc(n.title)
-            sb.append(if (n.children.any { c -> c.pages().any { it.key in have } }) "<li><details><summary>$label</summary>$kids</details></li>" else "<li>$label</li>")
+            val pk = pageKeyOf(n, have)
+            val label = if (pk != null) "<a href=\"${esc(lm.getValue(pk))}\">${esc(n.title)}</a>" else esc(n.title)
+            sb.append(if (n.children.any { c -> hasPage(c, have) }) "<li><details><summary>$label</summary>$kids</details></li>" else "<li>$label</li>")
         }
         return sb.append("</ul>").toString()
     }
@@ -202,6 +216,7 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
         idx.append("<div class=\"mk-foot\">${esc(l.footer)}</div></div>")
         idx.append("<script>window.MK_I18N=$i18n;</script><script src=\"assets/search-index.js\"></script><script>$SEARCH_JS</script></body></html>")
         File(siteDir, "index.html").writeText(idx.toString())
+        writeAtomic(File(siteDir, RENDER_STAMP), RENDER_VERSION.toString())
         progress(order.size, order.size)
     }
 }
