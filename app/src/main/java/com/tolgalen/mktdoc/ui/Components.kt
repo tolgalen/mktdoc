@@ -1,6 +1,12 @@
 package com.tolgalen.mktdoc.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -14,12 +20,29 @@ import com.tolgalen.mktdoc.ui.theme.ButtonShape
 import java.text.DateFormat
 import java.util.Date
 
+/** A whole row is one radio button for accessibility (TalkBack reads the label with the state), at least 48 dp tall. */
+fun Modifier.radioRow(selected: Boolean, onSelect: () -> Unit): Modifier =
+    fillMaxWidth().heightIn(min = 48.dp).selectable(selected, role = Role.RadioButton, onClick = onSelect)
+
+fun Modifier.checkRow(checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit): Modifier =
+    fillMaxWidth().heightIn(min = 48.dp).toggleable(value = checked, enabled = enabled, role = Role.Checkbox, onValueChange = onChange)
+
+fun Modifier.switchRow(checked: Boolean, onChange: (Boolean) -> Unit): Modifier =
+    fillMaxWidth().heightIn(min = 48.dp).toggleable(checked, role = Role.Switch, onValueChange = onChange)
+
+/** Centers the content and limits it to [max] width (phones are unaffected; tablets get a readable column). */
+fun Modifier.contentColumn(max: androidx.compose.ui.unit.Dp = 720.dp): Modifier = this.then(Modifier.layout { measurable, constraints ->
+    val w = minOf(constraints.maxWidth, max.roundToPx())
+    val p = measurable.measure(constraints.copy(minWidth = minOf(constraints.minWidth, w), maxWidth = w))
+    layout(constraints.maxWidth, p.height) { p.place((constraints.maxWidth - p.width) / 2, 0) }
+})
+
 @Composable
 fun SectionCard(title: String? = null, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (title != null) Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            if (title != null) Text(title, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             content()
         }
     }

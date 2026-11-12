@@ -14,6 +14,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -78,7 +82,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         })
     }) { pad ->
         val scroll = key(group) { rememberScrollState() }
-        Column(Modifier.padding(pad).fillMaxSize().verticalScroll(scroll).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(pad).contentColumn().fillMaxSize().verticalScroll(scroll).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when (group) {
                 null -> SettingsGroup.entries.forEach { g -> GroupRow(g.icon, stringResource(g.title), stringResource(g.summary)) { group = g } }
                 SettingsGroup.APPEARANCE -> AppearanceGroup(vm)
@@ -117,8 +121,8 @@ private fun AppearanceGroup(vm: MainViewModel) {
     SectionCard(stringResource(R.string.theme)) {
         listOf(ThemeMode.SYSTEM to R.string.theme_system, ThemeMode.DARK to R.string.theme_dark, ThemeMode.NAVY to R.string.theme_navy,
             ThemeMode.BLACK to R.string.theme_black, ThemeMode.LIGHT to R.string.theme_light).forEach { (m, res) ->
-            Row(Modifier.fillMaxWidth().clickable { vm.prefs.setTheme(m) }, verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(theme == m, { vm.prefs.setTheme(m) }); Text(stringResource(res))
+            Row(Modifier.radioRow(theme == m) { vm.prefs.setTheme(m) }, verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(theme == m, null); Spacer(Modifier.width(8.dp)); Text(stringResource(res))
             }
         }
     }
@@ -126,28 +130,35 @@ private fun AppearanceGroup(vm: MainViewModel) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             for (pl in ThemePalette.entries) {
                 val selected = pl == palette && !(dynamic && android.os.Build.VERSION.SDK_INT >= 31)
+                val name = stringResource(paletteName(pl))
                 Box(
-                    Modifier.size(40.dp).clip(CircleShape).background(paletteSwatch(pl))
-                        .border(if (selected) 3.dp else 1.dp, if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline, CircleShape)
-                        .clickable { vm.prefs.setPalette(pl); vm.prefs.setDynamicColor(false) },
+                    Modifier.size(48.dp).selectable(selected, role = Role.RadioButton) { vm.prefs.setPalette(pl); vm.prefs.setDynamicColor(false) }
+                        .semantics { contentDescription = name },
                     contentAlignment = Alignment.Center,
-                ) { if (selected) Icon(Icons.Default.Check, null, Modifier.size(20.dp), tint = Color.White) }
+                ) {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).background(paletteSwatch(pl))
+                            .border(if (selected) 3.dp else 1.dp, if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) { if (selected) Icon(Icons.Default.Check, null, Modifier.size(20.dp), tint = Color.White) }
+                }
             }
         }
         Text(stringResource(paletteName(palette)), style = MaterialTheme.typography.bodyMedium)
-        if (android.os.Build.VERSION.SDK_INT >= 31) Row(verticalAlignment = Alignment.CenterVertically) {
+        if (android.os.Build.VERSION.SDK_INT >= 31) Row(Modifier.switchRow(dynamic) { vm.prefs.setDynamicColor(it) }, verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.dynamic_color))
                 Text(stringResource(R.string.dynamic_color_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Switch(dynamic, { vm.prefs.setDynamicColor(it) })
+            Switch(dynamic, null)
         }
     }
     SectionCard(stringResource(R.string.language)) {
-        listOf("" to R.string.language_system, "en" to R.string.language_english, "es" to R.string.language_spanish).forEach { (code, res) ->
-            Row(Modifier.fillMaxWidth().clickable { AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(code)) },
+        listOf("" to R.string.language_system, "en" to R.string.language_english, "es" to R.string.language_spanish,
+            "fr" to R.string.language_french, "de" to R.string.language_german, "pt" to R.string.language_portuguese).forEach { (code, res) ->
+            Row(Modifier.radioRow(currentLang == code) { AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(code)) },
                 verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(currentLang == code, { AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(code)) })
+                RadioButton(currentLang == code, null); Spacer(Modifier.width(8.dp))
                 Text(stringResource(res))
             }
         }
@@ -160,8 +171,8 @@ private fun ReadingGroup(vm: MainViewModel) {
     SectionCard(stringResource(R.string.reader_font)) {
         Text(stringResource(R.string.reader_font_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         for ((pct, res) in readerSizes) {
-            Row(Modifier.fillMaxWidth().clickable { vm.prefs.setReaderZoom(pct) }, verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(zoom == pct, { vm.prefs.setReaderZoom(pct) })
+            Row(Modifier.radioRow(zoom == pct) { vm.prefs.setReaderZoom(pct) }, verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(zoom == pct, null); Spacer(Modifier.width(8.dp))
                 Text(stringResource(res) + " · $pct %")
             }
         }
@@ -182,9 +193,9 @@ private fun NetworkGroup(vm: MainViewModel) {
         }
     }
     SectionCard(stringResource(R.string.wifi_only)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.switchRow(wifiOnly, vm.prefs::setWifiOnly), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.wifi_only_desc), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-            Switch(wifiOnly, vm.prefs::setWifiOnly)
+            Switch(wifiOnly, null)
         }
     }
     SectionCard(stringResource(R.string.storage)) {
@@ -212,15 +223,16 @@ private fun AlertsGroup(vm: MainViewModel) {
     val periodic by vm.prefs.periodicCheck.collectAsState()
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     SectionCard(stringResource(R.string.notifications)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        val onPeriodic = { it: Boolean ->
+            vm.prefs.setPeriodic(it)
+            if (it && android.os.Build.VERSION.SDK_INT >= 33) notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+        Row(Modifier.switchRow(periodic, onPeriodic), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.periodic_check))
                 Text(stringResource(R.string.periodic_check_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Switch(periodic, {
-                vm.prefs.setPeriodic(it)
-                if (it && android.os.Build.VERSION.SDK_INT >= 33) notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-            })
+            Switch(periodic, null)
         }
     }
 }

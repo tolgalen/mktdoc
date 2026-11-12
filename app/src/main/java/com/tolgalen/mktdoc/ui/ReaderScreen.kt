@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import com.tolgalen.mktdoc.data.OutlineNode
 import com.tolgalen.mktdoc.data.PageRef
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.*
@@ -35,8 +36,9 @@ import java.io.File
 fun ReaderScreen(
     label: String, index: File, initialPath: String?, zoom: Int, onZoom: (Int) -> Unit,
     bookmarks: List<PageRef>, onToggleBookmark: (PageRef) -> Unit, onVisit: (PageRef) -> Unit,
-    onSearch: () -> Unit, onBack: () -> Unit,
+    onSearch: () -> Unit, onBack: () -> Unit, outline: List<OutlineNode> = emptyList(),
 ) {
+    val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 840 && outline.isNotEmpty()
     val siteDir = index.parentFile!!
     var current by remember { mutableStateOf<PageRef?>(null) }
     val starred = current?.let { c -> bookmarks.any { it.label == c.label && it.path == c.path } } == true
@@ -63,13 +65,18 @@ fun ReaderScreen(
                 }
             }
             IconButton({ current?.let(onToggleBookmark) }, enabled = current != null) {
-                Icon(if (starred) Icons.Default.Star else Icons.Default.StarBorder, stringResource(R.string.bookmark))
+                Icon(if (starred) Icons.Default.Star else Icons.Default.StarBorder, stringResource(if (starred) R.string.bookmark_remove else R.string.bookmark))
             }
             IconButton({ web?.loadUrl("file://" + index.absolutePath) }) { Icon(Icons.Default.Home, stringResource(R.string.index)) }
             IconButton(onSearch) { Icon(Icons.Default.Search, stringResource(R.string.search)) }
         })
     }) { pad ->
-        AndroidView<WebView>(modifier = Modifier.padding(pad).fillMaxSize(), factory = { ctx ->
+        Row(Modifier.padding(pad).fillMaxSize()) {
+        if (wide) {
+            OutlinePanel(outline, current?.path, { path -> web?.loadUrl("file://" + File(siteDir, path).absolutePath) }, Modifier.width(320.dp).fillMaxHeight())
+            VerticalDivider()
+        }
+        AndroidView<WebView>(modifier = Modifier.weight(1f).fillMaxHeight(), factory = { ctx ->
             WebView(ctx).apply {
                 settings.javaScriptEnabled = true
                 settings.allowFileAccess = true
@@ -104,5 +111,6 @@ fun ReaderScreen(
                 loadUrl("file://" + (initialPath?.let { File(siteDir, it).takeIf { f -> f.isFile } } ?: index).absolutePath)
             }
         }, update = { it.setBackgroundColor(bg); it.settings.textZoom = zoom }, onRelease = { it.destroy() })
+        }
     }
 }

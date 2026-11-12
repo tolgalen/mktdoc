@@ -202,4 +202,8 @@
     <string name="compare_none">No differences in the sections downloaded for both versions.</string>
     <string name="filter_all">All</string>
     <string name="kind_removed_short">Removed</string>
+    <string name="bookmark_remove">Remove bookmark</string>
+    <string name="language_french">Français</string>
+    <string name="language_german">Deutsch</string>
+    <string name="language_portuguese">Português</string>
 </resources>

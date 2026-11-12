@@ -195,7 +195,7 @@ object Discovery {
             if (!p.startsWith("/docs/") || verPathRe.containsMatchIn(p) || p.startsWith("/docs/tags")) continue
             cands.add(BASE + prefix + p.removePrefix("/docs") + "/")
         }
-        log("Probing ${cands.size} candidate pages in $prefix…")
+        log(Msg.t("Probing ${cands.size} candidate pages in $prefix…", "Sondeando ${cands.size} páginas candidatas en $prefix…"))
         val sem = Semaphore(12)
         val found = coroutineScope {
             cands.map { u ->
@@ -207,7 +207,7 @@ object Discovery {
                 }
             }.awaitAll().filterNotNull()
         }
-        log("${found.size} of them exist in this version.")
+        log(Msg.t("${found.size} of them exist in this version.", "${found.size} de ellas existen en esta versión."))
         return found
     }
 
@@ -249,7 +249,7 @@ object Discovery {
             byKey[o.key!!] = o
         }
         for (r in st.roots) for (n in r.walk()) if (n.children.isNotEmpty()) n.category = true
-        log("${orphans.size} pages from the sitemap were added to the structure.")
+        log(Msg.t("${orphans.size} pages from the sitemap were added to the structure.", "Se añadieron ${orphans.size} páginas del sitemap a la estructura."))
     }
 
     // ------------------------------------------------------------------ changelog
@@ -288,8 +288,8 @@ object Discovery {
             Jsoup.parse(Http.getString(url), url).select("link[rel=stylesheet][href]").mapNotNull { Http.resolve(url, it.attr("href")) }
         }
         val (posts, extras) = withContext(Dispatchers.IO) { changelogLocs(log) }
-        if (posts.isEmpty()) throw java.io.IOException("No changelog entries were found")
-        log("${posts.size} changelog entries.")
+        if (posts.isEmpty()) throw java.io.IOException(Msg.t("No changelog entries were found", "No se encontraron entradas del changelog"))
+        log(Msg.t("${posts.size} changelog entries.", "${posts.size} entradas del changelog."))
         val extraNodes = extras.map { Node(prettyName(it.substringAfterLast('/')), it, it).also { n -> n.orphan = true } }
         return Structure(changelogVersion(), buildChangelogRoots(posts.associateWith { it.substringAfter("changelog-") }, extraNodes), css)
     }
@@ -307,7 +307,7 @@ object Discovery {
         for (e in extras) if (extraNodes.none { it.key == e }) extraNodes.add(Node(prettyName(e.substringAfterLast('/')), e, e).also { it.orphan = true })
         st.roots.clear()
         st.roots.addAll(buildChangelogRoots(known, extraNodes))
-        if (known.size > before) log("${known.size - before} new entries in the sitemap.")
+        if (known.size > before) log(Msg.t("${known.size - before} new entries in the sitemap.", "${known.size - before} entradas nuevas en el sitemap."))
     }
 
     /** Structure of a version: sidebar menu + sitemap + second level (so subsections can be chosen). */
@@ -319,7 +319,7 @@ object Discovery {
             d to d.select("link[rel=stylesheet][href]").mapNotNull { Http.resolve(url, it.attr("href")) }
         }
         val st = Structure(v, parseMenuDoc(doc, url, v).toMutableList(), css)
-        if (st.roots.isEmpty()) log("Warning: the sidebar menu was not found; the sitemap will be used.")
+        if (st.roots.isEmpty()) log(Msg.t("Warning: the sidebar menu was not found; the sitemap will be used.", "Aviso: no se encontró el menú lateral; se usará el sitemap."))
         addOrphans(st, probe = true, log)
         expandMenus(st, log, deep = false)
         return st
@@ -350,7 +350,7 @@ object Discovery {
                                 n to parseMenuDoc(Jsoup.parse(Http.getString(url), url), url, st.version)
                             } catch (e: Exception) {
                                 if (e is CancellationException) throw e
-                                log("  warning: could not read a category menu (${e.message})"); null
+                                log(Msg.t("  warning: could not read a category menu (${e.message})", "  aviso: no se pudo leer el menú de una categoría (${e.message})")); null
                             }
                         }
                     }

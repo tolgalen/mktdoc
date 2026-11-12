@@ -88,6 +88,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ------------------------------------------------------------------ long operations
+    /** Starts a long operation with the progress messages in the app language. */
+    private fun startJob(title: String, block: suspend (com.tolgalen.mktdoc.data.Reporter) -> String?) {
+        com.tolgalen.mktdoc.data.Msg.spanish = lang == "es"
+        Jobs.start(a, title, block)
+    }
+
     private fun busy() = Jobs.state.value.running
 
     private fun requireNetwork() {
@@ -98,7 +104,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Downloads a version; with [sections] only those top-level sections (ids from [nodeId]). */
     fun download(v: DocVersion, sections: Set<String>? = null) {
-        Jobs.start(a, str(R.string.job_download, v.label)) { rep ->
+        startJob(str(R.string.job_download, v.label)) { rep ->
             requireNetwork()
             val m = library.download(v, lang, rep, sections)
             if (m.label == com.tolgalen.mktdoc.data.CHANGELOG) str(R.string.msg_downloaded_changelog, m.pages) else str(R.string.msg_downloaded, m.label, m.pages)
@@ -107,7 +113,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun check(label: String) {
         val online = if (_onlineOk.value == true) _online.value else null
-        Jobs.start(a, str(R.string.job_check, label)) { rep ->
+        startJob(str(R.string.job_check, label)) { rep ->
             requireNetwork()
             val r = library.check(label, online, rep)
             when {
@@ -122,7 +128,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun apply(label: String, removeGone: Boolean) {
-        Jobs.start(a, str(R.string.job_apply, label)) { rep ->
+        startJob(str(R.string.job_apply, label)) { rep ->
             library.apply(label, removeGone, lang, rep)
             str(R.string.msg_applied, label)
         }
@@ -173,7 +179,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun exportZip(label: String, uri: Uri) {
-        Jobs.start(a, str(R.string.job_zip, label)) { rep ->
+        startJob(str(R.string.job_zip, label)) { rep ->
             val out = a.contentResolver.openOutputStream(uri, "w") ?: error("Could not open the destination")
             library.exportZip(label, out, rep)
             str(R.string.msg_zip_done, label)
@@ -181,7 +187,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun rerender(label: String) {
-        Jobs.start(a, str(R.string.job_apply, label)) { _ ->
+        startJob(str(R.string.job_apply, label)) { _ ->
             withContext(Dispatchers.IO) { library.rerender(label, lang) }
             null
         }
@@ -193,6 +199,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Loads the section tree. With [local] it comes from the offline copy (no network). */
     fun loadTree(v: DocVersion, forceOnline: Boolean = false, local: Boolean = false) {
         if (_tree.value.label == v.label && _tree.value.structure != null && !forceOnline && _tree.value.local == local) return
+        com.tolgalen.mktdoc.data.Msg.spanish = lang == "es"
         _tree.value = TreeState(loading = true, label = v.label, local = local)
         viewModelScope.launch {
             try {
@@ -239,7 +246,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 resolver.openOutputStream(doc!!, "w")!!
             }
         }
-        Jobs.start(a, str(R.string.job_pdf, v.label)) { rep ->
+        startJob(str(R.string.job_pdf, v.label)) { rep ->
             try {
                 if (!local) requireNetwork()
                 val lstore = if (local) withContext(Dispatchers.IO) { library.store(v.label) } else null

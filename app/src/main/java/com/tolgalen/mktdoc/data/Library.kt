@@ -44,6 +44,9 @@ data class LocalVersion(
     }
 }
 
+/** Entry of the outline (table of contents) of an offline copy; [path] is relative to `site/` (null for sections without a page). */
+class OutlineNode(val title: String, val path: String?, val children: List<OutlineNode>)
+
 enum class ChangeKind { ADDED, MODIFIED, REMOVED }
 
 class PageChange(val key: String, val title: String, val kind: ChangeKind, val removedLines: List<String>, val addedLines: List<String>)
@@ -199,19 +202,19 @@ class Library(private val ctx: Context) {
      */
     suspend fun download(v: DocVersion, lang: String, rep: Reporter, sections: Set<String>? = null): LocalVersion {
         val dir = dir(v.label)
-        if (freeSpace() < MIN_FREE_BYTES) throw java.io.IOException("Not enough free space (${freeSpace() / 1_000_000} MB). At least ${MIN_FREE_BYTES / 1_000_000} MB are needed.")
+        if (freeSpace() < MIN_FREE_BYTES) throw java.io.IOException(Msg.t("Not enough free space (${freeSpace() / 1_000_000} MB). At least ${MIN_FREE_BYTES / 1_000_000} MB are needed.", "No hay espacio suficiente (${freeSpace() / 1_000_000} MB libres). Hacen falta al menos ${MIN_FREE_BYTES / 1_000_000} MB."))
         dir.mkdirs()
         val resuming = partialMarker(v.label).isFile
         partialMarker(v.label).writeText("1")
         rep.progress("structure", 0, 0)
-        rep.log("Reading the structure of ${v.label}…")
+        rep.log(Msg.t("Reading the structure of ${v.label}…", "Leyendo la estructura de ${v.label}…"))
         val st = Discovery.loadStructure(v, rep.log)
         val old = if (File(dir, "manifest.json").isFile) store(v.label) else null
         val out = Store(dir, File(siteDir(v.label), "assets"))
         val roots = if (sections == null) st.roots else st.roots.filter { nodeId(it) in sections }
-        if (roots.isEmpty()) throw IllegalArgumentException("No section selected")
+        if (roots.isEmpty()) throw IllegalArgumentException(Msg.t("No section selected", "No hay ninguna sección seleccionada"))
         val keepOld = sections != null || resuming
-        if (resuming) rep.log("Resuming an interrupted download…")
+        if (resuming) rep.log(Msg.t("Resuming an interrupted download…", "Reanudando una descarga interrumpida…"))
         val opts = CrawlOptions(maxAgeSec = if (resuming) 6 * 3600L else 0L)
         val res = Crawler(st, roots, old, out, opts, rep.log, { d, t -> rep.progress("pages", d, t) }, checkpoint = { snap ->
             // checkpoint: keep what is already downloaded so a cancelled download can be resumed
@@ -234,7 +237,7 @@ class Library(private val ctx: Context) {
             dir.dirSize(), false, 0, partial)
         saveMeta(meta.copy(downloadedAt = now))
         partialMarker(v.label).delete()
-        if (res.failed.isNotEmpty()) rep.log("${res.failed.size} pages could not be downloaded.")
+        if (res.failed.isNotEmpty()) rep.log(Msg.t("${res.failed.size} pages could not be downloaded.", "${res.failed.size} páginas no se pudieron descargar."))
         return local(v.label)!!
     }
 
@@ -292,7 +295,7 @@ class Library(private val ctx: Context) {
         val old = store(label)
         val st = old.loadStructure() ?: throw IllegalStateException("no stored structure")
         for (r in st.roots) for (n in r.walk()) if (n.category || n.children.isNotEmpty()) n.expanded = false
-        rep.log("Looking for new pages…")
+        rep.log(Msg.t("Looking for new pages…", "Buscando páginas nuevas…"))
         if (label == CHANGELOG) Discovery.refreshChangelog(st, rep.log) else Discovery.addOrphans(st, probe = false, rep.log)
         stagingDir(label).deleteRecursively()
         val staging = Store(stagingDir(label), File(siteDir(label), "assets"))
@@ -375,6 +378,21 @@ class Library(private val ctx: Context) {
     fun discardPending(label: String) {
         stagingDir(label).deleteRecursively()
         local(label)?.let { saveMeta(it.copy(pendingChanges = 0)) }
+    }
+
+    /** Table of contents of the offline copy (only pages that were downloaded), for the reader's side panel. */
+    suspend fun outline(label: String): List<OutlineNode> = withContext(Dispatchers.IO) {
+        val s = store(label)
+        val st = s.loadStructure() ?: return@withContext emptyList()
+        val keys = st.roots.flatMap { r -> r.pages().toList() }.filter { it.key in s.manifest }.distinctBy { it.key }.map { it.key!! }
+        val lm = SiteRenderer.localMap(st.version.prefix, keys)
+        val have = keys.toHashSet()
+        fun build(n: Node): OutlineNode? {
+            if (n.pages().none { it.key in have }) return null
+            val kids = n.children.mapNotNull(::build)
+            return OutlineNode(n.title, n.key?.takeIf { it in have }?.let { lm[it] }, kids)
+        }
+        st.roots.mapNotNull(::build)
     }
 
     // ------------------------------------------------------------------ compare two copies

@@ -21,6 +21,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.tolgalen.mktdoc.R
@@ -40,8 +42,8 @@ private fun <T> OptionGroup(title: String, options: List<Opt<T>>, selected: T, o
     Column {
         if (title.isNotEmpty()) Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         options.forEach { o ->
-            Row(Modifier.fillMaxWidth().clickable { onSelect(o.value) }, verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected == o.value, { onSelect(o.value) })
+            Row(Modifier.radioRow(selected == o.value) { onSelect(o.value) }, verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected == o.value, null)
                 Text(stringResource(o.label), style = MaterialTheme.typography.bodyMedium)
             }
         }
@@ -121,7 +123,7 @@ fun PdfScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
             }
         }
     }) { pad ->
-        LazyColumn(Modifier.padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.padding(pad).contentColumn(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
                 if (hasLocal && hasOnline) SectionCard(stringResource(R.string.pdf_source)) {
                     OptionGroup("", listOf(Opt(true, R.string.source_local), Opt(false, R.string.source_online)), fromLocal) { useLocal = it; selected.clear() }
@@ -160,7 +162,7 @@ fun PdfScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
                 val id = nodeId(v.node)
                 val inherited = v.node.ancestors().any { nodeId(it) in selected }
                 Row(Modifier.fillMaxWidth().padding(start = (v.depth * 16).dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(id in selected || inherited, { c -> if (c) selected.add(id) else selected.remove(id) }, enabled = !inherited)
+                    Checkbox(id in selected || inherited, { c -> if (c) selected.add(id) else selected.remove(id) }, Modifier.semantics { contentDescription = v.node.title }, enabled = !inherited)
                     Text(v.node.title, Modifier.weight(1f).clickable(enabled = v.expandable) { if (id in expanded) expanded.remove(id) else expanded.add(id) },
                         style = MaterialTheme.typography.bodyMedium)
                     if (v.expandable) IconButton({ if (id in expanded) expanded.remove(id) else expanded.add(id) }) {

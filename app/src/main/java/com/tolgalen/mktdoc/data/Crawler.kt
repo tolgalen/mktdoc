@@ -104,7 +104,7 @@ class Crawler(
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            log("  warning: could not download $url (${e.message})")
+            log(Msg.t("  warning: could not download $url (${e.message})", "  aviso: no se pudo descargar $url (${e.message})"))
         }
         amap[url] = local
         return local.ifEmpty { null }
@@ -129,7 +129,7 @@ class Crawler(
                 })
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                log("  warning: CSS not downloaded $cssUrl0 (${e.message})")
+                log(Msg.t("  warning: CSS not downloaded $cssUrl0 (${e.message})", "  aviso: CSS no descargado $cssUrl0 (${e.message})"))
             }
         }
         writeAtomic(File(out.assets, "site.css"), parts.joinToString("\n"))
@@ -198,7 +198,7 @@ class Crawler(
     private fun fetchPage(node: Node): Fetched {
         val key = node.key!!
         val url = BASE + node.href
-        if (!robots.canFetch(node.href!!)) throw IOException("blocked by robots.txt")
+        if (!robots.canFetch(node.href!!)) throw IOException(Msg.t("blocked by robots.txt", "bloqueada por robots.txt"))
         val wantMenu = (node.category || node.children.isNotEmpty()) && !node.expanded
         var prev = old?.manifest?.get(key)
         if (prev != null && (!old!!.rawFile(prev.file).isFile || (wantMenu && !old.menuFile(prev).isFile) || !imagesPresent(prev))) prev = null
@@ -223,7 +223,7 @@ class Crawler(
             menuHtml = Discovery.menuHtml(doc)?.let { "<nav class=\"menu\">$it</nav>" }
             if (wantMenu) menu = Discovery.parseMenuDoc(doc, url, st.version)
         }
-        val art = doc.selectFirst("article") ?: doc.selectFirst("main") ?: throw IOException("the page has no content")
+        val art = doc.selectFirst("article") ?: doc.selectFirst("main") ?: throw IOException(Msg.t("the page has no content", "la página no tiene contenido"))
         val links = ArrayList<String>()
         for (a in art.select("a[href]")) {
             val h = a.attr("href").trim()
@@ -305,7 +305,7 @@ class Crawler(
                             } else {
                                 failed.add(k)
                                 if (prev != null) result[k] = prev
-                                log("  error in ${n.href}: ${e?.message}")
+                                log(Msg.t("  error in ${n.href}: ${e?.message}", "  error en ${n.href}: ${e?.message}"))
                             }
                         }
                         done++
@@ -316,7 +316,7 @@ class Crawler(
             }
             val initial = roots.flatMap { r -> r.pages().toList() }
             synchronized(lock) { initial.forEach { submit(it) } }
-            log("Downloading ${initial.size} pages (more will be discovered while reading each category menu)…")
+            log(Msg.t("Downloading ${initial.size} pages (more will be discovered while reading each category menu)…", "Descargando ${initial.size} páginas (se descubrirán más al leer el menú de cada categoría)…"))
         }
         // synthetic folders left empty after moving pages to their official place
         fun prune(nodes: MutableList<Node>) {
@@ -328,7 +328,7 @@ class Crawler(
         prune(st.roots)
         val reachable = st.roots.flatMap { r -> r.walk().toList() }.toHashSet()
         roots = roots.filter { it in reachable }
-        log("${result.size} pages downloaded" + if (failed.isNotEmpty()) ", ${failed.size} with errors." else ".")
+        log(Msg.t("${result.size} pages downloaded", "${result.size} páginas descargadas") + if (failed.isNotEmpty()) Msg.t(", ${failed.size} with errors.", ", ${failed.size} con errores.") else ".")
         return CrawlResult(result, added, modified, gone, failed)
     }
 

@@ -22,6 +22,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -69,7 +71,7 @@ fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Un
             IconButton(onSettings) { Icon(Icons.Default.Settings, stringResource(R.string.settings)) }
         })
     }) { pad ->
-        LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(Modifier.padding(pad).contentColumn().fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             if (job.running) item { Banner(stringResource(R.string.job_running, job.title), MaterialTheme.colorScheme.primary) }
             if (ok == false) item { Banner(stringResource(R.string.offline_list), Palette.warn) }
@@ -153,7 +155,7 @@ fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: 
             IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
         })
     }) { pad ->
-        Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(pad).contentColumn().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (lv?.removedOnline == true) Banner(stringResource(R.string.version_gone_full, label), Palette.bad)
             if (ok == false) Banner(stringResource(R.string.offline_list), Palette.warn)
             if (lv != null) SectionCard(stringResource(R.string.offline_copy)) {
@@ -209,8 +211,8 @@ fun ChangesScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
     }, bottomBar = {
         if (report != null) Surface(tonalElevation = 3.dp) {
             Column(Modifier.padding(12.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (report.removed > 0) Row(Modifier.clickable { removeGone = !removeGone }, verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(removeGone, { removeGone = it })
+                if (report.removed > 0) Row(Modifier.checkRow(removeGone) { removeGone = it }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(removeGone, null)
                     Text(stringResource(R.string.remove_gone, report.removed), style = MaterialTheme.typography.bodyMedium)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -221,8 +223,8 @@ fun ChangesScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
         }
     }) { pad ->
         if (report == null) {
-            Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.no_changes_pending)) }
-        } else LazyColumn(Modifier.padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.padding(pad).contentColumn().fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.no_changes_pending)) }
+        } else LazyColumn(Modifier.padding(pad).contentColumn(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
                 Text(stringResource(R.string.msg_changes, report.added, report.modified, report.removed), style = MaterialTheme.typography.titleSmall)
                 if (report.failed > 0) Text(stringResource(R.string.check_failed, report.failed), color = Palette.warn, style = MaterialTheme.typography.bodySmall)
@@ -278,9 +280,9 @@ fun JobDialog() {
                         else LinearProgressIndicator(Modifier.fillMaxWidth())
                         Text(phaseText(ctx, s), style = MaterialTheme.typography.bodyMedium)
                     }
-                    s.error != null -> Text(stringResource(R.string.job_failed, s.error!!), color = MaterialTheme.colorScheme.error)
-                    s.cancelled -> Text(stringResource(R.string.job_cancelled))
-                    else -> Text(s.message ?: stringResource(R.string.job_done))
+                    s.error != null -> Text(stringResource(R.string.job_failed, s.error!!), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error)
+                    s.cancelled -> Text(stringResource(R.string.job_cancelled), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
+                    else -> Text(s.message ?: stringResource(R.string.job_done), Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite })
                 }
                 if (s.log.isNotEmpty()) Text(s.log.takeLast(5).joinToString("\n"), fontFamily = FontFamily.Monospace, fontSize = 10.sp,
                     maxLines = 8, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -307,7 +309,7 @@ fun SearchScreen(vm: MainViewModel, only: String?, onBack: () -> Unit, onOpen: (
         TopAppBar(title = { Text(if (only != null) stringResource(R.string.search_in, versionTitle(only)) else stringResource(R.string.search)) },
             navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } })
     }) { pad ->
-        LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(Modifier.padding(pad).contentColumn().fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             item {
                 OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(stringResource(R.string.search_hint)) },
                     leadingIcon = { Icon(Icons.Default.Search, null) },
@@ -353,17 +355,17 @@ fun CompareScreen(vm: MainViewModel, a: String, b: String, onBack: () -> Unit) {
         })
     }) { pad ->
         when {
-            shown.error != null -> Box(Modifier.padding(pad).fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+            shown.error != null -> Box(Modifier.padding(pad).contentColumn().fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.structure_error, shown.error), color = MaterialTheme.colorScheme.error)
             }
-            result == null -> Column(Modifier.padding(pad).fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
+            result == null -> Column(Modifier.padding(pad).contentColumn().fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
                 if (shown.total > 0) LinearProgressIndicator(progress = { shown.done.toFloat() / shown.total }, Modifier.fillMaxWidth())
                 else LinearProgressIndicator(Modifier.fillMaxWidth())
                 Text(stringResource(R.string.comparing), Modifier.padding(top = 12.dp))
             }
             else -> {
                 val list = result.filter { only.isEmpty() || it.kind.name == only }
-                LazyColumn(Modifier.padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(Modifier.padding(pad).contentColumn(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     item {
                         Text(stringResource(R.string.compare_summary, shown.a, shown.b, result.count { it.kind == ChangeKind.ADDED },
                             result.count { it.kind == ChangeKind.MODIFIED }, result.count { it.kind == ChangeKind.REMOVED }), style = MaterialTheme.typography.titleSmall)

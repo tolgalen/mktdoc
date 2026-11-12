@@ -69,8 +69,9 @@ private fun App(vm: MainViewModel) {
             val zoom by vm.prefs.readerZoom.collectAsState()
             val bookmarks by vm.prefs.bookmarks.collectAsState()
             val label = arg.substringBefore('|')
+            val outline by produceState<List<com.tolgalen.mktdoc.data.OutlineNode>>(emptyList(), label) { value = vm.library.outline(label) }
             ReaderScreen(label, vm.library.indexFile(label), arg.substringAfter('|', "").ifEmpty { null }, zoom, vm.prefs::setReaderZoom,
-                bookmarks, vm.prefs::toggleBookmark, vm.prefs::pushRecent, onSearch = { push("search:$label") }, onBack = ::pop)
+                bookmarks, vm.prefs::toggleBookmark, vm.prefs::pushRecent, onSearch = { push("search:$label") }, onBack = ::pop, outline = outline)
         }
         "search" -> SearchScreen(vm, only = arg.ifEmpty { null }, onBack = ::pop, onOpen = { r -> push("reader:${r.label}|${r.path}") })
         "settings" -> SettingsScreen(vm, onBack = ::pop)

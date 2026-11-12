@@ -54,7 +54,14 @@ online, and can export the documentation to a ZIP or a PDF.
   changed lines. Partial copies are compared over the sections both hold.
 - **Themes** like the rest of my apps: System, Dark, Dark blue, Black (OLED) and Light, plus 8 color palettes
   (mktdoc, Material Design, Ocean, Forest, Violet, Amber, Rose, Slate) and Material You dynamic colors.
-- English and Spanish interface (per-app language), settings grouped by category, open-source license screen.
+- Interface in **English, Spanish, French, German and Portuguese** (per-app language), settings grouped by
+  category, open-source license screen. The generated offline site, the PDF texts and the progress messages
+  exist in English and Spanish; with another language they use English.
+- **Accessibility**: radio buttons, check boxes and switches are single, labelled elements for TalkBack (touch
+  targets of at least 48 dp), section titles are headings, palette swatches and the bookmark star have
+  descriptions, and the result of an operation is announced.
+- **Tablets and large screens**: content is a centered column (max. 720 dp); the reader shows the table of
+  contents of the copy as a side panel (screens of 840 dp or more) that highlights and reveals the current page.
 - Polite to the server: honors `robots.txt`, caps requests per second (adjustable) and retries 429/5xx.
 
 ## Screenshots
@@ -354,7 +361,7 @@ posts a result notification and stops. Operations report progress through a smal
   User-visible texts built there use a context localized with the per-app language, because the application
   context does not follow it by itself.
 - Navigation is a tiny back stack of route strings (`home`, `version:7.26`, `changes:7.26`, `pdf:7.26`,
-  `reader:7.26`, `settings`) saved with `rememberSaveable`.
+  `reader:7.26`, `search:`, `download:7.26`, `compare:7.25|7.26`, `settings`) saved with `rememberSaveable`.
 - Settings are a list of categories; each opens a sub-page (back returns to the list).
 - **Theming**: `ThemeMode` (System, Dark, Dark blue, Black, Light) × `ThemePalette` (mktdoc, Material Design,
   Ocean, Forest, Violet, Amber, Rose, Slate), plus Material You dynamic colors on Android 12+. Dark blue and
@@ -371,6 +378,8 @@ wrapper is used; the Gradle daemon JVM is configured as JDK 25 (auto-provisioned
 ./gradlew assembleDebug            # app/build/outputs/apk/debug/mktdoc-v1.0.0-debug.apk
 ./gradlew testDebugUnitTest        # unit tests
 ./gradlew lintDebug                # Android lint
+./gradlew connectedDebugAndroidTest  # UI/integration tests on a device or emulator (it uninstalls the app afterwards,
+                                     # which deletes its downloaded data on that device)
 ./gradlew assembleRelease          # release APK (minified); signed when keystore.properties exists
 ```
 
@@ -383,7 +392,9 @@ git-ignored). `minSdk` is 29 (Android 10), `targetSdk` 36.
 Dependencies: Jetpack Compose + Material 3, AndroidX (activity, lifecycle, appcompat, WorkManager), OkHttp,
 jsoup, PDFBox-Android and kotlinx.coroutines. The unit tests (`app/src/test`) cover version comparison, path
 normalization, the local file mapping and relative links, the Docusaurus menu parser, structure
-serialization, the text hash used to detect changes and the search index.
+serialization, the text hash used to detect changes, the search index and the PDF link mapping. The instrumented
+tests (`app/src/androidTest`) cover the reusable Compose components (action grid, accessible rows, the reader's
+outline panel) and the search code against a copy written to the app's storage.
 
 ## Design notes and limitations
 
@@ -397,7 +408,9 @@ serialization, the text hash used to detect changes and the search index.
   the link's `#fragment`); the contents lines themselves are not clickable (the bookmarks are).
 - **Memory/time**: very large PDFs (thousands of pages) are slow on a phone and PDFBox keeps temporary files;
   choose *one file per section* for the complete manual.
-- Progress messages in the job dialog are in English; the rest of the interface follows the app language.
+- Progress messages in the job dialog, the offline site's own labels and the PDF cover/contents texts are
+  available in English and Spanish only; the app interface has five languages. The translations other than
+  English and Spanish were written without a native review, so corrections are welcome.
 - The app is independent and **not endorsed by MikroTik**. The documentation is MikroTik's content, downloaded
   for personal use.
 

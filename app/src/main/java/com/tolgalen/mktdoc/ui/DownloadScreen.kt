@@ -54,7 +54,7 @@ fun DownloadScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
             }
         }
     }) { pad ->
-        LazyColumn(Modifier.padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        LazyColumn(Modifier.padding(pad).contentColumn(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             item {
                 Text(stringResource(R.string.download_sections_desc), style = MaterialTheme.typography.bodyMedium)
                 if (loading) { LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp)) }
@@ -66,8 +66,8 @@ fun DownloadScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
             }
             items(roots, key = { nodeId(it) }) { r ->
                 val id = nodeId(r)
-                Row(Modifier.fillMaxWidth().clickable { if (id in selected) selected.remove(id) else selected.add(id) }, verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(id in selected, { c -> if (c) selected.add(id) else selected.remove(id) })
+                Row(Modifier.checkRow(id in selected) { c -> if (c) selected.add(id) else selected.remove(id) }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(id in selected, null)
                     Text(r.title, style = MaterialTheme.typography.bodyLarge)
                 }
             }
