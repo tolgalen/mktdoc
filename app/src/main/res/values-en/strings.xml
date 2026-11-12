@@ -211,4 +211,6 @@
     <string name="undo">Undo</string>
     <string name="bookmarks_empty">You have no bookmarks yet. Tap the star while reading a page.</string>
     <string name="bookmarks_filter">Filter bookmarks</string>
+    <string name="hardware_title">Hardware guides</string>
+    <string name="msg_downloaded_hardware">Hardware guides downloaded (%1$d pages).</string>
 </resources>

@@ -211,4 +211,6 @@
     <string name="undo">Rückgängig</string>
     <string name="bookmarks_empty">Du hast noch keine Lesezeichen. Tippe beim Lesen einer Seite auf den Stern.</string>
     <string name="bookmarks_filter">Lesezeichen filtern</string>
+    <string name="hardware_title">Hardware-Anleitungen</string>
+    <string name="msg_downloaded_hardware">Hardware-Anleitungen heruntergeladen (%1$d Seiten).</string>
 </resources>

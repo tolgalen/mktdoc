@@ -48,7 +48,11 @@ import com.tolgalen.mktdoc.work.phaseText
 
 /** Visible title of a "version": RouterOS 7.26, or the documentation changelog. */
 @Composable
-fun versionTitle(label: String): String = if (label == CHANGELOG) stringResource(R.string.changelog_title) else "RouterOS $label"
+fun versionTitle(label: String): String = when (label) {
+    CHANGELOG -> stringResource(R.string.changelog_title)
+    HARDWARE -> stringResource(R.string.hardware_title)
+    else -> "RouterOS $label"
+}
 
 private data class Row(val label: String, val online: DocVersion?, val local: LocalVersion?)
 
@@ -62,9 +66,10 @@ fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Un
     val local by vm.local.collectAsState()
     val job by Jobs.state.collectAsState()
     val rows = remember(online, local) {
-        val labels = (online.map { it.label } + local.map { it.label }).distinct().filter { it != CHANGELOG }.sortedWith { a, b -> compareVersions(b, a) }
+        val labels = (online.map { it.label } + local.map { it.label }).distinct().filter { !isDocSet(it) }.sortedWith { a, b -> compareVersions(b, a) }
         labels.map { l -> Row(l, online.firstOrNull { it.label == l }, local.firstOrNull { it.label == l }) } +
-            Row(CHANGELOG, changelogVersion(), local.firstOrNull { it.label == CHANGELOG })
+            Row(CHANGELOG, changelogVersion(), local.firstOrNull { it.label == CHANGELOG }) +
+            Row(HARDWARE, hardwareVersion(), local.firstOrNull { it.label == HARDWARE })
     }
     Scaffold(topBar = {
         TopAppBar(title = { Text(stringResource(R.string.app_name), fontWeight = FontWeight.Bold) }, actions = {
@@ -119,7 +124,7 @@ private fun VersionCard(r: Row, onClick: () -> Unit) {
                 Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
                 Text(versionTitle(r.label), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                if (r.online?.current == true && r.label != CHANGELOG) Chip(stringResource(R.string.current))
+                if (r.online?.current == true && !isDocSet(r.label)) Chip(stringResource(R.string.current))
             }
             val l = r.local
             if (l != null) {
@@ -144,11 +149,11 @@ fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: 
     val ok by vm.onlineOk.collectAsState()
     val local by vm.local.collectAsState()
     val job by Jobs.state.collectAsState()
-    val ov = if (label == CHANGELOG) changelogVersion() else online.firstOrNull { it.label == label }
+    val ov = docSetVersion(label) ?: online.firstOrNull { it.label == label }
     val lv = local.firstOrNull { it.label == label }
     var confirmDelete by remember { mutableStateOf(false) }
     var pickCompare by remember { mutableStateOf(false) }
-    val others = local.filter { it.label != label && it.label != CHANGELOG }
+    val others = local.filter { it.label != label && !isDocSet(it.label) }
     val zipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) vm.exportZip(label, uri)
     }
@@ -171,7 +176,7 @@ fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: 
                 if (lv != null) {
                     add(Tile(stringResource(R.string.open_offline), Icons.AutoMirrored.Filled.MenuBook, onRead, primary = true))
                     add(Tile(stringResource(R.string.search), Icons.Default.Search, onSearch))
-                    if (label != CHANGELOG && others.isNotEmpty()) add(Tile(stringResource(R.string.compare_versions), Icons.Default.CompareArrows, { pickCompare = true }))
+                    if (!isDocSet(label) && others.isNotEmpty()) add(Tile(stringResource(R.string.compare_versions), Icons.Default.CompareArrows, { pickCompare = true }))
                     if (lv.pendingChanges > 0) add(Tile(stringResource(R.string.view_changes, lv.pendingChanges), Icons.Default.Compare, onChanges))
                     add(Tile(stringResource(R.string.check_updates), Icons.Default.Sync, { vm.check(label) }, enabled = !busy && ok != false))
                     add(Tile(stringResource(R.string.export_zip), Icons.Default.FolderZip, { zipLauncher.launch("mktdoc-$label.zip") }, enabled = !busy))

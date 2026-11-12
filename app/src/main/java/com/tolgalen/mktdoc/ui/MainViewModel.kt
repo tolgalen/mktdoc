@@ -107,7 +107,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         startJob(str(R.string.job_download, v.label)) { rep ->
             requireNetwork()
             val m = library.download(v, lang, rep, sections)
-            if (m.label == com.tolgalen.mktdoc.data.CHANGELOG) str(R.string.msg_downloaded_changelog, m.pages) else str(R.string.msg_downloaded, m.label, m.pages)
+            when (m.label) {
+                com.tolgalen.mktdoc.data.CHANGELOG -> str(R.string.msg_downloaded_changelog, m.pages)
+                com.tolgalen.mktdoc.data.HARDWARE -> str(R.string.msg_downloaded_hardware, m.pages)
+                else -> str(R.string.msg_downloaded, m.label, m.pages)
+            }
         }
     }
 

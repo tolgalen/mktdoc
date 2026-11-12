@@ -211,4 +211,6 @@
     <string name="undo">Deshacer</string>
     <string name="bookmarks_empty">Aún no tienes marcadores. Toca la estrella al leer una página.</string>
     <string name="bookmarks_filter">Filtrar marcadores</string>
+    <string name="hardware_title">Guías de hardware</string>
+    <string name="msg_downloaded_hardware">Guías de hardware descargadas (%1$d páginas).</string>
 </resources>

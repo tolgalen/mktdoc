@@ -8,6 +8,20 @@ const val CHANGELOG = "changelog"
 
 fun changelogVersion() = DocVersion(CHANGELOG, "/changelog")
 
+/** Label of the special "version" that holds the hardware guides (https://manual.mikrotik.com/hardware/). */
+const val HARDWARE = "hardware"
+
+/** The hardware guides are a separate Docusaurus site with its own sidebar; they are treated like the current version of it. */
+fun hardwareVersion() = DocVersion(HARDWARE, "/hardware", current = true)
+
+/** Collections that are not RouterOS versions (changelog, hardware guides). */
+fun isDocSet(label: String) = label == CHANGELOG || label == HARDWARE
+
+fun docSetVersion(label: String): DocVersion? = when (label) { CHANGELOG -> changelogVersion(); HARDWARE -> hardwareVersion(); else -> null }
+
+/** Page whose sidebar menu describes the structure of a version (`/docs/7.25/introduction`, `/hardware/`). */
+fun entryUrl(v: DocVersion) = com.tolgalen.mktdoc.net.Http.BASE + if (v.label == HARDWARE) v.prefix + "/" else v.prefix + "/introduction"
+
 /** A documentation version (7.26, 7.25...). `prefix` is its path on the website: /docs or /docs/7.25. */
 data class DocVersion(val label: String, val prefix: String, val current: Boolean = false) {
     fun toJson() = JSONObject().put("label", label).put("prefix", prefix).put("current", current)

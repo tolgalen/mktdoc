@@ -46,6 +46,9 @@ online, and can export the documentation to a ZIP or a PDF.
 - **Retired versions**: if a version you downloaded is no longer published, the app warns you (banner and
   notification, with an optional daily background check) and keeps your copy.
 - **Documentation changelog** (<https://manual.mikrotik.com/changelog>) as one more downloadable item.
+- **Hardware guides** (<https://manual.mikrotik.com/hardware/>: ports, buttons, mounting, powering and specifications
+  of every MikroTik product, ~250 pages) as another downloadable item, with the same reader, search, bookmarks,
+  section download, difference check, ZIP and PDF export.
 - **ZIP export** of the offline copy (a self-contained site, `index.html` at the root).
 - **PDF export** (from your offline copy, without network, or from the website) with the same options as the desktop app: sections and subsections,
   one file or one per section, cover title and image, image quality, text size and page breaks. The PDF has a
@@ -73,7 +76,7 @@ online, and can export the documentation to a ZIP or a PDF.
 |---|---|---|
 | <img src="docs/screenshots/home.png" width="230"> | <img src="docs/screenshots/version.png" width="230"> | <img src="docs/screenshots/download_progress.png" width="230"> |
 
-The list shows the online versions and the documentation changelog; each card says whether an offline copy
+The list shows the online versions, the documentation changelog and the hardware guides; each card says whether an offline copy
 exists. The version screen is a grid of actions. Long operations run in a foreground service and show a
 progress dialog (it can be hidden or cancelled).
 
@@ -187,7 +190,7 @@ flowchart LR
 ### Data on disk
 
 Each downloaded version lives in its own folder under the app's private storage (`filesDir/docs/<label>/`).
-The changelog uses the label `changelog`.
+The changelog uses the label `changelog` and the hardware guides `hardware` (see `isDocSet`).
 
 ```
 docs/<label>/
@@ -291,7 +294,16 @@ its old `/docs` prefix now serves another version); the double check avoids fals
 refreshed, and `VersionCheckWorker` (WorkManager, once a day, only with network) runs the same check in the
 background and posts a notification. The flag is stored in `meta.json`, so the banner, the card chip and the
 version screen keep showing it. The offline copy is never deleted automatically, and *Check differences* on it just reports that the version is no
-longer online. The changelog is excluded from this check.
+longer online. The changelog and the hardware guides are excluded from this check.
+
+### The hardware guides
+
+`https://manual.mikrotik.com/hardware/` is a second Docusaurus docs plugin of the same site (own sidebar with product
+categories, ~250 flat pages such as `/hardware/cap-ax`; `robots.txt` allows it). It is a special version with
+label `hardware` and prefix `/hardware` that is treated as a *current* version, so it reuses the normal
+pipeline unchanged: structure from the sidebar of `/hardware/` (`entryUrl`) plus the sitemap pages missing from
+the menu, category menus read while downloading, hash-based difference check, and the optional section download
+(each product category is a section). Links to the RouterOS docs stay web links.
 
 ### The documentation changelog
 

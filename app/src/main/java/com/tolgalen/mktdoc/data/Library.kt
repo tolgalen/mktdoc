@@ -177,7 +177,7 @@ class Library(private val ctx: Context) {
     suspend fun refreshAvailability(online: List<DocVersion>): List<LocalVersion> = withContext(Dispatchers.IO) {
         val newlyGone = ArrayList<LocalVersion>()
         for (lv in listLocal()) {
-            if (lv.label == CHANGELOG) continue          // not a version: it is always on the website
+            if (isDocSet(lv.label)) continue          // not a version: it is always on the website
             val ov = online.firstOrNull { it.label == lv.label }
             val gone = if (ov != null) false else try {
                 !Http.exists(Http.BASE + lv.prefix + "/introduction") ||
@@ -284,10 +284,10 @@ class Library(private val ctx: Context) {
         var newPrefix: String? = null
         if (ov != null && ov.prefix != m.prefix) { migratePrefix(label, ov.prefix); newPrefix = ov.prefix; m = local(label)!! }
         val reachable = withContext(Dispatchers.IO) {
-            try { Http.exists(Http.BASE + m.prefix + if (label == CHANGELOG) "" else "/introduction") } catch (e: HttpStatus) { true } catch (e: java.io.IOException) { throw e }
+            try { Http.exists(if (label == CHANGELOG) Http.BASE + m.prefix else entryUrl(DocVersion(label, m.prefix))) } catch (e: HttpStatus) { true } catch (e: java.io.IOException) { throw e }
         }
         // the /docs prefix may now belong to another version
-        val gone = !reachable || (label != CHANGELOG && ov == null && online != null && online.isNotEmpty())
+        val gone = !reachable || (!isDocSet(label) && ov == null && online != null && online.isNotEmpty())
         if (gone) {
             saveMeta(m.copy(removedOnline = true, checkedAt = now))
             return CheckReport(label, now, true, emptyList(), 0, newPrefix)

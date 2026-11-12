@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.tolgalen.mktdoc.R
 import com.tolgalen.mktdoc.data.DocVersion
+import com.tolgalen.mktdoc.data.docSetVersion
 import com.tolgalen.mktdoc.data.nodeId
 import com.tolgalen.mktdoc.ui.theme.ButtonShape
 import com.tolgalen.mktdoc.work.Jobs
@@ -28,7 +29,7 @@ import com.tolgalen.mktdoc.work.Jobs
 fun DownloadScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
     val online by vm.online.collectAsState()
     val job by Jobs.state.collectAsState()
-    val version = online.firstOrNull { it.label == label }
+    val version = docSetVersion(label) ?: online.firstOrNull { it.label == label }
         ?: DocVersion(label, if (label == online.firstOrNull { it.current }?.label) "/docs" else "/docs/$label")
     var roots by remember { mutableStateOf<List<com.tolgalen.mktdoc.data.Node>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }

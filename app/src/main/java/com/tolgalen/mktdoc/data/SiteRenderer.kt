@@ -9,12 +9,12 @@ fun esc(s: String): String = s.replace("&", "&amp;").replace("<", "&lt;").replac
 
 /** Texts of the buttons and messages of the generated HTML site (the exported site does not depend on the app language). */
 class SiteLabels(val home: String, val search: String, val prev: String, val next: String, val theme: String,
-                 val results: String, val none: String, val filter: String, val title: String, val footer: String, val changelog: String) {
+                 val results: String, val none: String, val filter: String, val title: String, val footer: String, val changelog: String, val hardware: String) {
     companion object {
         fun forLang(lang: String) = if (lang == "es") SiteLabels("Índice", "Buscar…", "Anterior", "Siguiente", "Cambiar tema",
-            "{n} resultados", "Sin resultados", "Buscar en toda la documentación…", "Manual de MikroTik RouterOS", "Copia sin conexión de manual.mikrotik.com", "Changelog de la documentación de MikroTik")
+            "{n} resultados", "Sin resultados", "Buscar en toda la documentación…", "Manual de MikroTik RouterOS", "Copia sin conexión de manual.mikrotik.com", "Changelog de la documentación de MikroTik", "Guías de hardware de MikroTik")
         else SiteLabels("Index", "Search…", "Previous", "Next", "Toggle theme",
-            "{n} results", "No results", "Search the whole documentation…", "MikroTik RouterOS manual", "Offline copy of manual.mikrotik.com", "MikroTik documentation changelog")
+            "{n} results", "No results", "Search the whole documentation…", "MikroTik RouterOS manual", "Offline copy of manual.mikrotik.com", "MikroTik documentation changelog", "MikroTik hardware guides")
     }
 }
 
@@ -145,7 +145,7 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
             return null
         }
         val label = st.version.label
-        val siteTitle = if (label == CHANGELOG) l.changelog else "${l.title} $label"
+        val siteTitle = when (label) { CHANGELOG -> l.changelog; HARDWARE -> l.hardware; else -> "${l.title} $label" }
         siteDir.mkdirs()
         // old pages are deleted (not the resources)
         siteDir.listFiles()?.forEach { if (it.name != "assets") it.deleteRecursively() }

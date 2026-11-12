@@ -29,7 +29,8 @@ import com.tolgalen.mktdoc.R
 import com.tolgalen.mktdoc.ui.theme.ButtonShape
 import com.tolgalen.mktdoc.data.CHANGELOG
 import com.tolgalen.mktdoc.data.DocVersion
-import com.tolgalen.mktdoc.data.changelogVersion
+import com.tolgalen.mktdoc.data.docSetVersion
+import com.tolgalen.mktdoc.data.isDocSet
 import com.tolgalen.mktdoc.data.Node
 import com.tolgalen.mktdoc.data.nodeId
 import com.tolgalen.mktdoc.pdf.*
@@ -58,11 +59,11 @@ fun PdfScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
     val online by vm.online.collectAsState()
     val tree by vm.tree.collectAsState()
     val job by Jobs.state.collectAsState()
-    val version = if (label == CHANGELOG) changelogVersion() else online.firstOrNull { it.label == label }
+    val version = docSetVersion(label) ?: online.firstOrNull { it.label == label }
         ?: DocVersion(label, if (label == online.firstOrNull { it.current }?.label) "/docs" else "/docs/$label")
     val localVersions by vm.local.collectAsState()
     val hasLocal = localVersions.any { it.label == label }
-    val hasOnline = label == CHANGELOG || online.any { it.label == label }
+    val hasOnline = isDocSet(label) || online.any { it.label == label }
     // source of the pages: the offline copy (default, no network) or the website
     var useLocal by rememberSaveable { mutableStateOf(hasLocal) }
     val fromLocal = if (!hasOnline) true else if (!hasLocal) false else useLocal

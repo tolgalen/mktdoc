@@ -313,7 +313,7 @@ object Discovery {
     /** Structure of a version: sidebar menu + sitemap + second level (so subsections can be chosen). */
     suspend fun loadStructure(v: DocVersion, log: (String) -> Unit): Structure {
         if (v.label == CHANGELOG) return loadChangelogStructure(log)
-        val url = BASE + v.prefix + "/introduction"
+        val url = entryUrl(v)
         val (doc, css) = withContext(Dispatchers.IO) {
             val d = Jsoup.parse(Http.getString(url), url)
             d to d.select("link[rel=stylesheet][href]").mapNotNull { Http.resolve(url, it.attr("href")) }
@@ -327,7 +327,7 @@ object Discovery {
 
     /** Top-level sections of a version, from the sidebar menu of one page (fast; used to pick what to download). */
     suspend fun loadRoots(v: DocVersion): List<Node> = withContext(Dispatchers.IO) {
-        val url = BASE + v.prefix + "/introduction"
+        val url = entryUrl(v)
         parseMenuDoc(Jsoup.parse(Http.getString(url), url), url, v)
     }
 

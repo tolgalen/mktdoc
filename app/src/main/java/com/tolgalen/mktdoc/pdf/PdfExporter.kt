@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import com.tolgalen.mktdoc.data.ASSET_PREFIX
 import com.tolgalen.mktdoc.data.CHANGELOG
+import com.tolgalen.mktdoc.data.HARDWARE
+import com.tolgalen.mktdoc.data.isDocSet
 import com.tolgalen.mktdoc.data.CrawlOptions
 import com.tolgalen.mktdoc.data.Crawler
 import com.tolgalen.mktdoc.data.Node
@@ -147,7 +149,7 @@ class PdfExporter(
         val img = opts.coverImage?.let { copyCoverImage(it) }
         val banner = if (img != null) "<img class=\"cv-img\" src=\"${fileUrl(img)}\">"
         else "<div class=\"cv-banner\"><span>MikroTik</span> RouterOS</div>"
-        return "<div class=\"cover\">$banner<h1>${esc(title)}</h1><h2>${if (label == CHANGELOG) "" else esc(s("Versión", "Version")) + " " + label}</h2>" +
+        return "<div class=\"cover\">$banner<h1>${esc(title)}</h1><h2>${if (isDocSet(label)) "" else esc(s("Versión", "Version")) + " " + label}</h2>" +
             "<p>${esc(s("Copia en PDF de manual.mikrotik.com", "PDF copy of manual.mikrotik.com"))}<br>${esc(s("Impreso el", "Printed on"))} ${esc(date)}</p></div>"
     }
 
@@ -347,8 +349,8 @@ class PdfExporter(
         /** A single file with everything, or one file per chosen section. */
         fun groupsFor(label: String, layout: PdfLayout, selected: List<Node>): List<PdfGroup> {
             val sel = normalize(selected)
-            val base = if (label == CHANGELOG) "MikroTik-docs-changelog" else "MikroTik-RouterOS-$label"
-            val title = if (label == CHANGELOG) "MikroTik documentation changelog" else "MikroTik RouterOS $label"
+            val base = when (label) { CHANGELOG -> "MikroTik-docs-changelog"; HARDWARE -> "MikroTik-hardware-guides"; else -> "MikroTik-RouterOS-$label" }
+            val title = when (label) { CHANGELOG -> "MikroTik documentation changelog"; HARDWARE -> "MikroTik hardware guides"; else -> "MikroTik RouterOS $label" }
             return if (layout == PdfLayout.SINGLE) listOf(PdfGroup(title, "$base.pdf", sel))
             else sel.map { PdfGroup(it.title, "$base-${slug(it.title)}.pdf", listOf(it)) }
         }
