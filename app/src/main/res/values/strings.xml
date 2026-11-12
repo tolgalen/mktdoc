@@ -206,7 +206,6 @@
     <string name="language_french">Français</string>
     <string name="language_german">Deutsch</string>
     <string name="language_portuguese">Português</string>
-    <string name="bookmarks_see_all">Ver todos (%1$d)</string>
     <string name="bookmark_removed">Marcador quitado</string>
     <string name="undo">Deshacer</string>
     <string name="bookmarks_empty">Aún no tienes marcadores. Toca la estrella al leer una página.</string>

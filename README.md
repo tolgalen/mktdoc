@@ -38,8 +38,9 @@ online, and can export the documentation to a ZIP or a PDF.
 - **Offline HTML copy**: pages, images and CSS are downloaded and turned into a navigable site with an index,
   **full-text search**, previous/next navigation and light/dark mode.
 - **Native search** across every downloaded version (words match by prefix, title matches rank first), plus
-  **bookmarks** and a "continue reading" shortcut on the home screen. The home screen shows the 8 newest
-  bookmarks; "See all" opens the Bookmarks screen (grouped by version, newest first, text filter, remove with undo).
+  **bookmarks** and a "continue reading" shortcut on the home screen. A bookmark icon in the
+  top bar (with the number of bookmarks) opens a bottom sheet with all of them, grouped by version, newest first,
+  with a text filter and removal with undo.
 - **In-app reader** (WebView) that follows the app theme and has a **font size** selector (80 – 175 %).
 - **Check differences with the website**: reads the online version again and compares it with your copy
   (new, modified and removed pages, with the changed lines). Nothing is applied until you confirm.
@@ -374,7 +375,7 @@ posts a result notification and stops. Operations report progress through a smal
   User-visible texts built there use a context localized with the per-app language, because the application
   context does not follow it by itself.
 - Navigation is a tiny back stack of route strings (`home`, `version:7.26`, `changes:7.26`, `pdf:7.26`,
-  `reader:7.26`, `search:`, `bookmarks`, `download:7.26`, `compare:7.25|7.26`, `settings`) saved with `rememberSaveable`.
+  `reader:7.26`, `search:`, `download:7.26`, `compare:7.25|7.26`, `settings`) saved with `rememberSaveable`.
 - Settings are a list of categories; each opens a sub-page (back returns to the list).
 - **Theming**: `ThemeMode` (System, Dark, Dark blue, Black, Light) × `ThemePalette` (mktdoc, Material Design,
   Ocean, Forest, Violet, Amber, Rose, Slate), plus Material You dynamic colors on Android 12+. Dark blue and

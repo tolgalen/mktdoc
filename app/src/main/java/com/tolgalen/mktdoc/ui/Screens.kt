@@ -57,7 +57,8 @@ fun versionTitle(label: String): String = when (label) {
 private data class Row(val label: String, val online: DocVersion?, val local: LocalVersion?)
 
 @Composable
-fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Unit, onSearch: () -> Unit, onPage: (PageRef) -> Unit, onAllBookmarks: () -> Unit) {
+fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Unit, onSearch: () -> Unit, onPage: (PageRef) -> Unit) {
+    var showBookmarks by rememberSaveable { mutableStateOf(false) }
     val recent by vm.prefs.recent.collectAsState()
     val bookmarks by vm.prefs.bookmarks.collectAsState()
     val online by vm.online.collectAsState()
@@ -73,6 +74,11 @@ fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Un
     }
     Scaffold(topBar = {
         TopAppBar(title = { Text(stringResource(R.string.app_name), fontWeight = FontWeight.Bold) }, actions = {
+            IconButton({ showBookmarks = true }) {
+                BadgedBox(badge = { if (bookmarks.isNotEmpty()) Badge { Text("${bookmarks.size}") } }) {
+                    Icon(Icons.Default.Bookmarks, stringResource(R.string.bookmarks))
+                }
+            }
             IconButton(onSearch, enabled = local.isNotEmpty()) { Icon(Icons.Default.Search, stringResource(R.string.search)) }
             IconButton({ vm.refresh() }, enabled = !loading) { Icon(Icons.Default.Refresh, stringResource(R.string.refresh)) }
             IconButton(onSettings) { Icon(Icons.Default.Settings, stringResource(R.string.settings)) }
@@ -91,16 +97,16 @@ fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Un
                     PageRow(recent.first(), Icons.Default.History, onPage)
                 }
             }
-            if (bookmarks.isNotEmpty()) item {
-                SectionCard(stringResource(R.string.bookmarks)) {
-                    bookmarks.takeLast(8).reversed().forEach { PageRow(it, Icons.Default.Star, onPage) }
-                    TextButton(onAllBookmarks, shape = ButtonShape) { Text(stringResource(R.string.bookmarks_see_all, bookmarks.size)) }
-                }
-            }
             if (rows.isEmpty() && !loading) item { Text(stringResource(R.string.no_versions), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(rows, key = { it.label }) { r -> VersionCard(r) { onOpen(r.label) } }
         }
     }
+    HomeBookmarks(vm, showBookmarks, { showBookmarks = false }, onPage)
+}
+
+@Composable
+private fun HomeBookmarks(vm: MainViewModel, show: Boolean, onClose: () -> Unit, onPage: (PageRef) -> Unit) {
+    if (show) BookmarksSheet(vm, onClose) { r -> onClose(); onPage(r) }
 }
 
 @Composable
@@ -392,9 +398,9 @@ fun CompareScreen(vm: MainViewModel, a: String, b: String, onBack: () -> Unit) {
     }
 }
 
-/** All bookmarks, grouped by version (newest first), with a text filter and removal with undo. */
+/** Bottom sheet with all the bookmarks, grouped by version (newest first), with a text filter and removal with undo. */
 @Composable
-fun BookmarksScreen(vm: MainViewModel, onBack: () -> Unit, onOpen: (PageRef) -> Unit) {
+fun BookmarksSheet(vm: MainViewModel, onDismiss: () -> Unit, onOpen: (PageRef) -> Unit) {
     val bookmarks by vm.prefs.bookmarks.collectAsState()
     var q by rememberSaveable { mutableStateOf("") }
     val snack = remember { SnackbarHostState() }
@@ -406,47 +412,45 @@ fun BookmarksScreen(vm: MainViewModel, onBack: () -> Unit, onOpen: (PageRef) -> 
         bookmarks.filter { t.isEmpty() || it.title.lowercase().contains(t) || it.label.lowercase().contains(t) }.reversed()
     }
     val groups = shown.groupBy { it.label }.toSortedMap { x, y -> compareVersions(y, x) }
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.bookmarks)) }, navigationIcon = {
-                IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
-            })
-        },
-        snackbarHost = { SnackbarHost(snack) },
-    ) { pad ->
-        LazyColumn(Modifier.padding(pad).contentColumn().fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            item {
-                OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(stringResource(R.string.bookmarks_filter)) },
-                    leadingIcon = { Icon(Icons.Default.Search, null) },
-                    trailingIcon = { if (q.isNotEmpty()) IconButton({ q = "" }) { Icon(Icons.Default.Clear, null) } })
-            }
-            if (bookmarks.isEmpty()) item { Text(stringResource(R.string.bookmarks_empty), Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            else if (shown.isEmpty()) item { Text(stringResource(R.string.no_results), Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            groups.forEach { (label, refs) ->
-                item(key = "h$label") {
-                    Text(versionTitle(label) + " · ${refs.size}", Modifier.padding(top = 12.dp).semantics { heading() },
-                        style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Box(Modifier.fillMaxWidth()) {
+            LazyColumn(Modifier.fillMaxWidth().contentColumn(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 72.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                item {
+                    Text(stringResource(R.string.bookmarks) + " · ${bookmarks.size}", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
+                    if (bookmarks.size > 4) OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true,
+                        placeholder = { Text(stringResource(R.string.bookmarks_filter)) }, leadingIcon = { Icon(Icons.Default.Search, null) },
+                        trailingIcon = { if (q.isNotEmpty()) IconButton({ q = "" }) { Icon(Icons.Default.Clear, null) } })
                 }
-                items(refs, key = { it.label + "|" + it.path }) { r ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f).clickable { onOpen(r) }.padding(vertical = 6.dp)) {
-                            Text(r.title.ifBlank { r.path }, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            Text(r.path.removeSuffix(".html"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                        }
-                        IconButton({
-                            val idx = bookmarks.indexOfFirst { it.label == r.label && it.path == r.path }
-                            vm.prefs.toggleBookmark(r)
-                            scope.launch {
-                                snack.currentSnackbarData?.dismiss()
-                                if (snack.showSnackbar(removedMsg, undoLabel, duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed)
-                                    vm.prefs.insertBookmark(idx, r)
-                            }
-                        }) { Icon(Icons.Default.Delete, stringResource(R.string.bookmark_remove)) }
+                if (bookmarks.isEmpty()) item { Text(stringResource(R.string.bookmarks_empty), Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                else if (shown.isEmpty()) item { Text(stringResource(R.string.no_results), Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                groups.forEach { (label, refs) ->
+                    item(key = "h$label") {
+                        Text(versionTitle(label) + " · ${refs.size}", Modifier.padding(top = 12.dp).semantics { heading() },
+                            style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     }
-                    HorizontalDivider()
+                    items(refs, key = { it.label + "|" + it.path }) { r ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f).clickable { onOpen(r) }.padding(vertical = 6.dp)) {
+                                Text(r.title.ifBlank { r.path }, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                Text(r.path.removeSuffix(".html"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            }
+                            IconButton({
+                                val idx = bookmarks.indexOfFirst { it.label == r.label && it.path == r.path }
+                                vm.prefs.toggleBookmark(r)
+                                scope.launch {
+                                    snack.currentSnackbarData?.dismiss()
+                                    if (snack.showSnackbar(removedMsg, undoLabel, duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed)
+                                        vm.prefs.insertBookmark(idx, r)
+                                }
+                            }) { Icon(Icons.Default.Delete, stringResource(R.string.bookmark_remove)) }
+                        }
+                        HorizontalDivider()
+                    }
                 }
             }
+            SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).padding(8.dp))
         }
     }
 }
