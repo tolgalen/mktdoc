@@ -212,4 +212,20 @@
     <string name="bookmarks_filter">Filter bookmarks</string>
     <string name="hardware_title">Hardware guides</string>
     <string name="msg_downloaded_hardware">Hardware guides downloaded (%1$d pages).</string>
+    <string name="updates">Updates</string>
+    <string name="app_installed_version">Installed version: %1$s</string>
+    <string name="update_available">New version available: %1$s</string>
+    <string name="up_to_date">The app is up to date.</string>
+    <string name="check_app_updates">Check for updates</string>
+    <string name="update_download">Download update (%1$s)</string>
+    <string name="update_install">Install %1$s</string>
+    <string name="update_downloaded">Update downloaded and verified.</string>
+    <string name="update_allow_install">Android will ask you to allow mktdoc to install apps; then tap Install again.</string>
+    <string name="update_check_failed">Could not check for updates: %1$s</string>
+    <string name="release_history">Version history</string>
+    <string name="release_installed">Installed</string>
+    <string name="release_open_github">View on GitHub</string>
+    <string name="job_update">Downloading mktdoc %1$s</string>
+    <string name="msg_update_ready">mktdoc %1$s downloaded and verified. You can install it from About.</string>
+    <string name="phase_update">Downloading the update</string>
 </resources>

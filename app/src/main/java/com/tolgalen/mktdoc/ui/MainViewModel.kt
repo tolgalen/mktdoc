@@ -142,6 +142,46 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun delete(label: String) { library.delete(label); prefs.removeBookmarksOf(label); refreshLocal() }
 
+    // ------------------------------------------------------------------ app updates (GitHub releases)
+    class UpdateState(val loading: Boolean = false, val releases: List<com.tolgalen.mktdoc.data.AppRelease> = emptyList(),
+                      val error: String? = null, val checkedAt: Long = 0L)
+
+    private val updates = com.tolgalen.mktdoc.data.Updates(a)
+    private val _app = MutableStateFlow(UpdateState(releases = updates.cached()))
+    val appUpdates: StateFlow<UpdateState> = _app
+
+    /** Reads the releases of the app from GitHub. Without [force] it is skipped if it was done in the last hour. */
+    fun checkAppUpdates(force: Boolean = false) {
+        val cur = _app.value
+        if (cur.loading || (!force && cur.error == null && System.currentTimeMillis() - cur.checkedAt < 3_600_000)) return
+        _app.value = UpdateState(true, cur.releases, null, cur.checkedAt)
+        viewModelScope.launch {
+            try {
+                val list = updates.fetch()
+                _app.value = UpdateState(false, list, null, System.currentTimeMillis())
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _app.value = UpdateState(false, cur.releases, e.message ?: e.toString(), cur.checkedAt)
+            }
+        }
+    }
+
+    init { viewModelScope.launch(Dispatchers.IO) { runCatching { updates.cleanup(com.tolgalen.mktdoc.BuildConfig.VERSION_NAME) } } }
+
+    fun isUpdateDownloaded(r: com.tolgalen.mktdoc.data.AppRelease) = updates.isDownloaded(r)
+
+    fun downloadUpdate(r: com.tolgalen.mktdoc.data.AppRelease) {
+        startJob(str(R.string.job_update, r.version)) { rep ->
+            requireNetwork()
+            updates.download(r) { d, t -> rep.progress("update", (d / 1024).toInt(), (t / 1024).toInt()) }
+            str(R.string.msg_update_ready, r.version)
+        }
+    }
+
+    /** Intent for the system installer, or for the setting that lets this app install packages. */
+    fun installIntent(r: com.tolgalen.mktdoc.data.AppRelease) = updates.installIntent(r)
+    fun canInstallUpdates() = updates.canInstall()
+
     // ------------------------------------------------------------------ compare versions
     class CompareState(val a: String = "", val b: String = "", val done: Int = 0, val total: Int = 0,
                        val result: List<com.tolgalen.mktdoc.data.PageChange>? = null, val error: String? = null)

@@ -57,6 +57,10 @@ online, and can export the documentation to a ZIP or a PDF.
   between manual pages that jump inside the PDF.
 - **Compare two versions** you have downloaded (e.g. 7.25 → 7.26): new, modified and removed pages, with the
   changed lines. Partial copies are compared over the sections both hold.
+- **App updates from GitHub** (About): shows the installed version, checks the repository's releases, lists the
+  version history with each release's notes, and downloads and installs a newer release. The APK is verified
+  (SHA-256 published with the release and the same signing certificate as the installed app) before the system
+  installer is opened.
 - **Themes** like the rest of my apps: System, Dark, Dark blue, Black (OLED) and Light, plus 8 color palettes
   (mktdoc, Material Design, Ocean, Forest, Violet, Amber, Rose, Slate) and Material You dynamic colors.
 - Interface in **English, Spanish, French, German and Portuguese** (per-app language), settings grouped by
@@ -410,6 +414,19 @@ serialization, the text hash used to detect changes, the search index and the PD
 tests (`app/src/androidTest`) cover the reusable Compose components (action grid, accessible rows, the reader's
 outline panel) and the search code against a copy written to the app's storage.
 
+### App updates
+
+`Updates` reads `https://api.github.com/repos/tolgalen/mktdoc/releases` (public, unauthenticated, no personal data is
+sent) and caches the list, so the version history also shows offline. The newest *stable* release with an `.apk`
+asset that is newer than `BuildConfig.VERSION_NAME` is offered. Downloading runs as a normal job (foreground
+service, progress, Wi-Fi-only option); the file goes to `cache/updates/` and is checked before it is offered:
+SHA-256 against the asset's `digest` (or the checksum written in the release notes), and its package name and
+signing certificate against the installed app's, so a file signed with another key (for example a debug build) is
+refused. Installing hands the file to the system installer through a `FileProvider`
+(`REQUEST_INSTALL_PACKAGES`); Android asks once to allow mktdoc to install apps, and Google Play Protect may show its
+own scan prompt for an app it does not know. Android 10 does not fill `signingInfo` for an archive that is not
+installed, so the deprecated `signatures` field is used as a fallback.
+
 ## Design notes and limitations
 
 - **No database.** Plain files make the offline copy trivially exportable and inspectable.
@@ -425,6 +442,7 @@ outline panel) and the search code against a copy written to the app's storage.
 - Progress messages in the job dialog, the offline site's own labels and the PDF cover/contents texts are
   available in English and Spanish only; the app interface has five languages. The translations other than
   English and Spanish were written without a native review, so corrections are welcome.
+- Release notes in the version history are shown as published on GitHub (English).
 - The app is independent and **not endorsed by MikroTik**. The documentation is MikroTik's content, downloaded
   for personal use.
 

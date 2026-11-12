@@ -142,6 +142,7 @@ fun phaseText(ctx: Context, s: JobState): String {
         "print" -> ctx.getString(R.string.phase_print)
         "merge" -> ctx.getString(R.string.phase_merge)
         "zip" -> ctx.getString(R.string.phase_zip) + n
+        "update" -> ctx.getString(R.string.phase_update) + if (s.total > 0) " ${s.done / 1024}/${s.total / 1024} MB" else ""
         else -> ctx.getString(R.string.phase_working)
     }
 }

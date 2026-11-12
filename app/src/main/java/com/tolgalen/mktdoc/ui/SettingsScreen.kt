@@ -89,7 +89,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 SettingsGroup.READING -> ReadingGroup(vm)
                 SettingsGroup.NETWORK -> NetworkGroup(vm)
                 SettingsGroup.ALERTS -> AlertsGroup(vm)
-                SettingsGroup.ABOUT -> AboutGroup()
+                SettingsGroup.ABOUT -> AboutGroup(vm)
                 SettingsGroup.LICENSES -> LicensesContent()
             }
         }
@@ -254,7 +254,7 @@ private fun ContactRow(icon: ImageVector, label: String, value: String, onClick:
 }
 
 @Composable
-private fun AboutGroup() {
+private fun AboutGroup(vm: MainViewModel) {
     var showGpl by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     fun open(intent: Intent) { runCatching { ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
@@ -262,6 +262,8 @@ private fun AboutGroup() {
         Text("mktdoc ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
         Text(stringResource(R.string.about_text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+    UpdatesCard(vm)
+    ReleaseHistoryCard(vm)
     SectionCard(stringResource(R.string.about_contact)) {
         ContactRow(Icons.Filled.Email, stringResource(R.string.about_email), CONTACT_EMAIL) {
             open(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$CONTACT_EMAIL")))
@@ -346,3 +348,67 @@ private fun LicenseTextDialog(asset: String, onClose: () -> Unit) {
 private fun reflow(raw: String): String = raw.replace("\r", "").split(Regex("\n[ \\t]*\n")).joinToString("\n\n") { para ->
     para.lines().joinToString(" ") { it.trim() }.trim()
 }.trim()
+
+/** Installed version, check for a newer release on GitHub, download it (verified) and install it with the system installer. */
+@Composable
+private fun UpdatesCard(vm: MainViewModel) {
+    val ctx = LocalContext.current
+    val state by vm.appUpdates.collectAsState()
+    val job by com.tolgalen.mktdoc.work.Jobs.state.collectAsState()
+    LaunchedEffect(Unit) { vm.checkAppUpdates() }
+    val newer = com.tolgalen.mktdoc.data.Updates.newer(state.releases, BuildConfig.VERSION_NAME)
+    val downloaded = remember(newer, job.running) { newer != null && vm.isUpdateDownloaded(newer) }
+    SectionCard(stringResource(R.string.updates)) {
+        Text(stringResource(R.string.app_installed_version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodyMedium)
+        if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        when {
+            newer != null -> {
+                Text(stringResource(R.string.update_available, newer.version), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                if (downloaded) {
+                    Text(stringResource(R.string.update_downloaded), style = MaterialTheme.typography.bodySmall)
+                    if (!vm.canInstallUpdates()) Text(stringResource(R.string.update_allow_install), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button({ runCatching { ctx.startActivity(vm.installIntent(newer).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } },
+                        shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.update_install, newer.version)) }
+                } else Button({ vm.downloadUpdate(newer) }, enabled = !job.running, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) {
+                    Text(stringResource(R.string.update_download, formatSize(newer.apkSize)))
+                }
+            }
+            state.error != null && state.releases.isEmpty() -> Text(stringResource(R.string.update_check_failed, state.error!!), color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall)
+            state.releases.isNotEmpty() && !state.loading -> Text(
+                if (state.error != null) stringResource(R.string.update_check_failed, state.error!!) else stringResource(R.string.up_to_date),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        OutlinedButton({ vm.checkAppUpdates(force = true) }, enabled = !state.loading, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) {
+            Text(stringResource(R.string.check_app_updates))
+        }
+    }
+}
+
+/** Every published release with its notes (the newest one open), marking the installed one. */
+@Composable
+private fun ReleaseHistoryCard(vm: MainViewModel) {
+    val ctx = LocalContext.current
+    val state by vm.appUpdates.collectAsState()
+    if (state.releases.isEmpty()) return
+    SectionCard(stringResource(R.string.release_history)) {
+        state.releases.forEachIndexed { i, r ->
+            var open by rememberSaveable(r.tag) { mutableStateOf(i == 0) }
+            val installed = r.version == BuildConfig.VERSION_NAME
+            Column(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { open = !open }.padding(vertical = 6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(r.tag + if (r.published.length >= 10) " · ${r.published.take(10)}" else "", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                    if (installed) Chip(stringResource(R.string.release_installed))
+                    Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null)
+                }
+                if (open) {
+                    Text(com.tolgalen.mktdoc.data.Updates.plainNotes(r.body), Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall)
+                    if (r.htmlUrl.isNotEmpty()) TextButton({ runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(r.htmlUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } },
+                        shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.release_open_github)) }
+                }
+            }
+            if (i < state.releases.lastIndex) HorizontalDivider()
+        }
+    }
+}
