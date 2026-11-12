@@ -61,7 +61,7 @@ class PdfExporter(private val ctx: Context, private val st: Structure, private v
         // 1. pages (cached for 7 days)
         store.load()
         rep.log(s("Descargando las páginas…", "Downloading pages…"))
-        val res = Crawler(st, roots, store, store, CrawlOptions(maxAgeSec = 7 * 86400), rep.log) { d, t -> rep.progress("pages", d, t) }.run()
+        val res = Crawler(st, roots, store, store, CrawlOptions(maxAgeSec = 7 * 86400), rep.log, progress = { d, t -> rep.progress("pages", d, t) }).run()
         store.manifest.putAll(res.pages); store.save()
         if (res.failed.isNotEmpty()) rep.log(s("${res.failed.size} páginas no se pudieron descargar y se omiten.", "${res.failed.size} pages could not be downloaded and are skipped."))
         // 2. images

@@ -122,6 +122,7 @@ private fun VersionCard(r: Row, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Chip(stringResource(R.string.offline_ready), Palette.ok.copy(alpha = 0.25f), MaterialTheme.colorScheme.onSurface)
+                    if (l.partial) Chip(stringResource(R.string.partial_copy), Palette.warn.copy(alpha = 0.3f), MaterialTheme.colorScheme.onSurface)
                     if (l.removedOnline) Chip(stringResource(R.string.gone_online), Palette.bad.copy(alpha = 0.3f), MaterialTheme.colorScheme.onSurface)
                     if (l.pendingChanges > 0) Chip(stringResource(R.string.pending_changes, l.pendingChanges), Palette.warn.copy(alpha = 0.3f), MaterialTheme.colorScheme.onSurface)
                 }
@@ -133,7 +134,7 @@ private fun VersionCard(r: Row, onClick: () -> Unit) {
 }
 
 @Composable
-fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: () -> Unit, onSearch: () -> Unit, onChanges: () -> Unit, onPdf: () -> Unit) {
+fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: () -> Unit, onSearch: () -> Unit, onSections: () -> Unit, onChanges: () -> Unit, onPdf: () -> Unit) {
     val online by vm.online.collectAsState()
     val ok by vm.onlineOk.collectAsState()
     val local by vm.local.collectAsState()
@@ -169,6 +170,7 @@ fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: 
                 }
                 if (ov != null) add(Tile(stringResource(if (lv == null) R.string.download else R.string.redownload), Icons.Default.Download,
                     { vm.download(ov) }, enabled = !busy && ok == true, primary = lv == null))
+                if (ov != null && label != CHANGELOG) add(Tile(stringResource(R.string.download_sections), Icons.Default.Checklist, onSections, enabled = !busy && ok == true))
                 if (ov != null || lv != null) add(Tile(stringResource(R.string.export_pdf), Icons.Default.PictureAsPdf, onPdf, enabled = !busy && ov != null))
                 if (lv != null) add(Tile(stringResource(R.string.delete_copy), Icons.Default.Delete, { confirmDelete = true }, enabled = !busy, danger = true))
             }

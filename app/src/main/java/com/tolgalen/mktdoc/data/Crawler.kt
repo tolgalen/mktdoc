@@ -74,6 +74,8 @@ class Crawler(
     private val opts: CrawlOptions = CrawlOptions(),
     private val log: (String) -> Unit = {},
     private val progress: (Int, Int) -> Unit = { _, _ -> },
+    /** Called every few dozen pages with the pages downloaded so far (to resume an interrupted download). */
+    private val checkpoint: ((Map<String, PageMeta>) -> Unit)? = null,
 ) {
     private var roots = roots
     private val amap = ConcurrentHashMap<String, String>()   // url -> "img/xxx" ("" if it failed)
@@ -308,6 +310,7 @@ class Crawler(
                         }
                         done++
                         progress(done, total)
+                        if (checkpoint != null && done % 50 == 0) checkpoint.invoke(LinkedHashMap(result))
                     }
                 }
             }

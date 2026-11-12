@@ -62,6 +62,9 @@ class Node(var title: String, var href: String? = null, var key: String? = null)
     }
 }
 
+/** Stable identifier of a tree node (to remember the selection). */
+fun nodeId(n: Node): String = n.key ?: ("t:" + (n.ancestors() + n).joinToString("/") { it.title })
+
 class Structure(val version: DocVersion, val roots: MutableList<Node>, val stylesheets: List<String>) {
     fun allPages(): List<Node> = roots.flatMap { it.pages().toList() }
 

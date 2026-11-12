@@ -26,10 +26,12 @@ data class LocalVersion(
     /** The website no longer publishes this version. */
     val removedOnline: Boolean,
     val pendingChanges: Int,
+    /** Only some sections of the manual were downloaded. */
+    val partial: Boolean = false,
 ) {
     fun toJson() = JSONObject().put("label", label).put("prefix", prefix).put("current", current)
         .put("aliases", JSONArray(aliases.toList())).put("downloadedAt", downloadedAt).put("checkedAt", checkedAt)
-        .put("pages", pages).put("size", sizeBytes).put("removedOnline", removedOnline).put("pending", pendingChanges)
+        .put("pages", pages).put("size", sizeBytes).put("removedOnline", removedOnline).put("pending", pendingChanges).put("partial", partial)
 
     companion object {
         fun fromJson(o: JSONObject): LocalVersion {
@@ -37,7 +39,7 @@ data class LocalVersion(
             return LocalVersion(o.getString("label"), o.getString("prefix"), o.optBoolean("current"),
                 if (al == null) setOf(o.getString("prefix")) else List(al.length()) { al.getString(it) }.toSet(),
                 o.optLong("downloadedAt"), o.optLong("checkedAt"), o.optInt("pages"), o.optLong("size"),
-                o.optBoolean("removedOnline"), o.optInt("pending"))
+                o.optBoolean("removedOnline"), o.optInt("pending"), o.optBoolean("partial"))
         }
     }
 }
@@ -188,17 +190,37 @@ class Library(private val ctx: Context) {
     }
 
     // ------------------------------------------------------------------ download
-    suspend fun download(v: DocVersion, lang: String, rep: Reporter): LocalVersion {
+    private fun partialMarker(label: String) = File(dir(label), ".partial")
+
+    /**
+     * Downloads a version. With [sections] (ids of top-level nodes, see [nodeId]) only those sections are read and
+     * the rest of an existing copy is kept. If a previous download was interrupted, the pages already fetched are
+     * not requested again.
+     */
+    suspend fun download(v: DocVersion, lang: String, rep: Reporter, sections: Set<String>? = null): LocalVersion {
         val dir = dir(v.label)
         if (freeSpace() < MIN_FREE_BYTES) throw java.io.IOException("Not enough free space (${freeSpace() / 1_000_000} MB). At least ${MIN_FREE_BYTES / 1_000_000} MB are needed.")
         dir.mkdirs()
+        val resuming = partialMarker(v.label).isFile
+        partialMarker(v.label).writeText("1")
         rep.progress("structure", 0, 0)
         rep.log("Reading the structure of ${v.label}…")
         val st = Discovery.loadStructure(v, rep.log)
         val old = if (File(dir, "manifest.json").isFile) store(v.label) else null
         val out = Store(dir, File(siteDir(v.label), "assets"))
-        val res = Crawler(st, st.roots, old, out, CrawlOptions(), rep.log) { d, t -> rep.progress("pages", d, t) }.run()
-        out.manifest.clear(); out.manifest.putAll(res.pages)
+        val roots = if (sections == null) st.roots else st.roots.filter { nodeId(it) in sections }
+        if (roots.isEmpty()) throw IllegalArgumentException("No section selected")
+        val keepOld = sections != null || resuming
+        if (resuming) rep.log("Resuming an interrupted download…")
+        val opts = CrawlOptions(maxAgeSec = if (resuming) 6 * 3600L else 0L)
+        val res = Crawler(st, roots, old, out, opts, rep.log, { d, t -> rep.progress("pages", d, t) }, checkpoint = { snap ->
+            // checkpoint: keep what is already downloaded so a cancelled download can be resumed
+            synchronized(out.manifest) { out.manifest.clear(); old?.let { out.manifest.putAll(it.manifest) }; out.manifest.putAll(snap) }
+            out.save()
+        }).run()
+        out.manifest.clear()
+        if (keepOld) old?.let { out.manifest.putAll(it.manifest) }
+        out.manifest.putAll(res.pages)
         out.save(); out.saveStructure(st)
         gc(out)
         val prev = local(v.label)
@@ -207,9 +229,11 @@ class Library(private val ctx: Context) {
         stagingDir(v.label).deleteRecursively()
         rep.progress("render", 0, 0)
         withContext(Dispatchers.IO) { SiteRenderer.render(out, st, siteDir(v.label), lang, aliases) { d, t -> rep.progress("render", d, t) } }
-        val meta = LocalVersion(v.label, v.prefix, v.current, aliases, prev?.downloadedAt ?: now, now, res.pages.size,
-            dir.dirSize(), false, 0)
+        val partial = if (sections == null) false else prev?.partial ?: true
+        val meta = LocalVersion(v.label, v.prefix, v.current, aliases, prev?.downloadedAt ?: now, now, out.manifest.size,
+            dir.dirSize(), false, 0, partial)
         saveMeta(meta.copy(downloadedAt = now))
+        partialMarker(v.label).delete()
         if (res.failed.isNotEmpty()) rep.log("${res.failed.size} pages could not be downloaded.")
         return local(v.label)!!
     }
@@ -272,7 +296,9 @@ class Library(private val ctx: Context) {
         if (label == CHANGELOG) Discovery.refreshChangelog(st, rep.log) else Discovery.addOrphans(st, probe = false, rep.log)
         stagingDir(label).deleteRecursively()
         val staging = Store(stagingDir(label), File(siteDir(label), "assets"))
-        val res = Crawler(st, st.roots, old, staging, CrawlOptions(), rep.log) { d, t -> rep.progress("pages", d, t) }.run()
+        // a partial copy only checks the sections it holds
+        val roots = if (m.partial) st.roots.filter { r -> r.pages().any { it.key in old.manifest } } else st.roots
+        val res = Crawler(st, roots, old, staging, CrawlOptions(), rep.log, progress = { d, t -> rep.progress("pages", d, t) }).run()
 
         val changes = ArrayList<PageChange>()
         withContext(Dispatchers.IO) {

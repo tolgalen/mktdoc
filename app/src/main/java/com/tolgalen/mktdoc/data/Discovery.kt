@@ -325,6 +325,12 @@ object Discovery {
         return st
     }
 
+    /** Top-level sections of a version, from the sidebar menu of one page (fast; used to pick what to download). */
+    suspend fun loadRoots(v: DocVersion): List<Node> = withContext(Dispatchers.IO) {
+        val url = BASE + v.prefix + "/introduction"
+        parseMenuDoc(Jsoup.parse(Http.getString(url), url), url, v)
+    }
+
     /** Reads each category page to learn its children (first level only, or all of them with `deep`). */
     suspend fun expandMenus(st: Structure, log: (String) -> Unit, deep: Boolean) {
         val reg = HashMap<String, Node>()

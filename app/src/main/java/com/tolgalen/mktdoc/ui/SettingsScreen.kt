@@ -171,12 +171,35 @@ private fun ReadingGroup(vm: MainViewModel) {
 @Composable
 private fun NetworkGroup(vm: MainViewModel) {
     val rps by vm.prefs.maxRps.collectAsState()
+    val wifiOnly by vm.prefs.wifiOnly.collectAsState()
+    val local by vm.local.collectAsState()
+    var confirm by remember { mutableStateOf<String?>(null) }
     var cache by remember { mutableLongStateOf(vm.cacheSize()) }
     SectionCard(stringResource(R.string.network)) {
         Text(stringResource(R.string.max_rps_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             rpsOptions.forEach { v -> FilterChip(rps == v, { vm.prefs.setMaxRps(v) }, { Text("$v/s") }) }
         }
+    }
+    SectionCard(stringResource(R.string.wifi_only)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.wifi_only_desc), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            Switch(wifiOnly, vm.prefs::setWifiOnly)
+        }
+    }
+    SectionCard(stringResource(R.string.storage)) {
+        Text(stringResource(R.string.storage_desc, formatSize(vm.appDataSize()), formatSize(vm.freeSpace())), style = MaterialTheme.typography.bodySmall)
+        local.forEach { v ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(versionTitle(v.label) + " · " + formatSize(v.sizeBytes), Modifier.weight(1f))
+                IconButton({ confirm = v.label }, enabled = !com.tolgalen.mktdoc.work.Jobs.state.value.running) { Icon(Icons.Default.Delete, stringResource(R.string.delete)) }
+            }
+        }
+    }
+    confirm?.let { l ->
+        AlertDialog({ confirm = null }, title = { Text(stringResource(R.string.delete_copy)) }, text = { Text(stringResource(R.string.delete_confirm, l)) },
+            confirmButton = { TextButton({ vm.delete(l); confirm = null }, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.delete)) } },
+            dismissButton = { TextButton({ confirm = null }, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.cancel)) } })
     }
     SectionCard(stringResource(R.string.cache)) {
         Text(stringResource(R.string.cache_desc, formatSize(cache)), style = MaterialTheme.typography.bodySmall)

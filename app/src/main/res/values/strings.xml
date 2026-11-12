@@ -181,4 +181,14 @@
     <string name="search_hint">Buscar en la documentación…</string>
     <string name="no_results">Sin resultados</string>
     <string name="n_results">%1$d resultados</string>
+    <string name="download_sections">Descargar secciones…</string>
+    <string name="download_sections_title">Descargar %1$s</string>
+    <string name="download_sections_desc">Elige las secciones que quieres tener sin conexión. Lo ya descargado se conserva.</string>
+    <string name="download_n_sections">Descargar %1$d secciones</string>
+    <string name="partial_copy">Copia parcial</string>
+    <string name="wifi_only">Solo con Wi-Fi</string>
+    <string name="wifi_only_desc">No descargar, comprobar ni generar PDF con datos móviles o redes de uso medido.</string>
+    <string name="err_wifi_only">«Solo con Wi-Fi» está activado y la conexión actual es de uso medido.</string>
+    <string name="storage">Almacenamiento</string>
+    <string name="storage_desc">La app usa %1$s. Espacio libre: %2$s.</string>
 </resources>

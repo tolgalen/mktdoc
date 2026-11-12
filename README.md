@@ -30,6 +30,11 @@ online, and can export the documentation to a ZIP or a PDF.
 
 - **Versions**: detects every published version (7.26, 7.25, 7.24…) and lets you pick one. The last known list
   is kept, so the app also starts without a connection.
+- **Partial and resumable downloads**: "Download sections…" lets you pick only the top-level sections you need
+  (a *Partial copy*; later downloads add to it). An interrupted download keeps the pages already fetched
+  (checkpoint every 50 pages) and resumes where it stopped.
+- **Wi-Fi only** option and a storage screen (space used per version, free space, delete). Downloads refuse to
+  start with less than 400 MB free.
 - **Offline HTML copy**: pages, images and CSS are downloaded and turned into a navigable site with an index,
   **full-text search**, previous/next navigation and light/dark mode.
 - **Native search** across every downloaded version (words match by prefix, title matches rank first), plus
@@ -175,7 +180,8 @@ The changelog uses the label `changelog`.
 
 ```
 docs/<label>/
-├── meta.json         label, prefix, download/check times, page count, size, "removed online" flag, pending changes
+├── meta.json         label, prefix, download/check times, page count, size, "removed online" flag, pending changes, partial flag
+├── .partial          marker while a download is unfinished (resume uses it; removed on success)
 ├── structure.json    the manual tree (sections, categories, pages) with their paths
 ├── manifest.json     per page: key, title, SHA-1 of its visible text, ETag, Last-Modified, timestamp, file name
 ├── raw/              cleaned <article> HTML of every page (images as @ASSETS@/img/… placeholders)

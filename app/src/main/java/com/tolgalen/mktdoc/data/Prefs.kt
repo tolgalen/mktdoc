@@ -51,6 +51,11 @@ class Prefs(ctx: Context) {
     val periodicCheck: StateFlow<Boolean> = _periodic
     fun setPeriodic(v: Boolean) { _periodic.value = v; sp.edit().putBoolean("periodic", v).apply() }
 
+    /** Download only on unmetered connections (Wi-Fi). */
+    private val _wifiOnly = MutableStateFlow(sp.getBoolean("wifi_only", false))
+    val wifiOnly: StateFlow<Boolean> = _wifiOnly
+    fun setWifiOnly(v: Boolean) { _wifiOnly.value = v; sp.edit().putBoolean("wifi_only", v).apply() }
+
     private val _rps = MutableStateFlow(sp.getInt("rps", 10))
     val maxRps: StateFlow<Int> = _rps
     fun setMaxRps(v: Int) { _rps.value = v; sp.edit().putInt("rps", v).apply() }

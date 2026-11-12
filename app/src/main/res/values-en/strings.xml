@@ -181,4 +181,14 @@
     <string name="search_hint">Search the documentation…</string>
     <string name="no_results">No results</string>
     <string name="n_results">%1$d results</string>
+    <string name="download_sections">Download sections…</string>
+    <string name="download_sections_title">Download %1$s</string>
+    <string name="download_sections_desc">Choose the sections you want offline. What is already downloaded is kept.</string>
+    <string name="download_n_sections">Download %1$d sections</string>
+    <string name="partial_copy">Partial copy</string>
+    <string name="wifi_only">Wi-Fi only</string>
+    <string name="wifi_only_desc">Do not download, check or build PDFs over mobile data or metered networks.</string>
+    <string name="err_wifi_only">"Wi-Fi only" is on and the current connection is metered.</string>
+    <string name="storage">Storage</string>
+    <string name="storage_desc">The app uses %1$s. Free space: %2$s.</string>
 </resources>

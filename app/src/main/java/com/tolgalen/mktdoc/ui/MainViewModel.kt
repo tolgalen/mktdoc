@@ -13,6 +13,7 @@ import com.tolgalen.mktdoc.data.Discovery
 import com.tolgalen.mktdoc.data.DocVersion
 import com.tolgalen.mktdoc.data.LocalVersion
 import com.tolgalen.mktdoc.data.Node
+import com.tolgalen.mktdoc.data.nodeId
 import com.tolgalen.mktdoc.data.Structure
 import com.tolgalen.mktdoc.data.dirSize
 import com.tolgalen.mktdoc.data.writeAtomic
@@ -29,9 +30,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.util.Locale
-
-/** Stable identifier of a tree node (to remember the selection). */
-fun nodeId(n: Node): String = n.key ?: ("t:" + (n.ancestors() + n).joinToString("/") { it.title })
 
 class TreeState(val loading: Boolean = false, val structure: Structure? = null, val error: String? = null, val label: String = "")
 
@@ -92,9 +90,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------------ long operations
     private fun busy() = Jobs.state.value.running
 
-    fun download(v: DocVersion) {
+    private fun requireNetwork() {
+        if (!prefs.wifiOnly.value) return
+        val cm = a.getSystemService(android.net.ConnectivityManager::class.java)
+        if (cm.isActiveNetworkMetered) throw java.io.IOException(str(R.string.err_wifi_only))
+    }
+
+    /** Downloads a version; with [sections] only those top-level sections (ids from [nodeId]). */
+    fun download(v: DocVersion, sections: Set<String>? = null) {
         Jobs.start(a, str(R.string.job_download, v.label)) { rep ->
-            val m = library.download(v, lang, rep)
+            requireNetwork()
+            val m = library.download(v, lang, rep, sections)
             if (m.label == com.tolgalen.mktdoc.data.CHANGELOG) str(R.string.msg_downloaded_changelog, m.pages) else str(R.string.msg_downloaded, m.label, m.pages)
         }
     }
@@ -102,6 +108,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun check(label: String) {
         val online = if (_onlineOk.value == true) _online.value else null
         Jobs.start(a, str(R.string.job_check, label)) { rep ->
+            requireNetwork()
             val r = library.check(label, online, rep)
             when {
                 r.unavailableOnline -> {
@@ -201,6 +208,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         Jobs.start(a, str(R.string.job_pdf, v.label)) { rep ->
             try {
+                requireNetwork()
                 PdfExporter(a, st, o, rep).export(selected, sink)
             } catch (e: Throwable) {
                 // the file chosen in the picker was created empty: do not leave it there
@@ -215,6 +223,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         File(a.filesDir, "pdfcache").deleteRecursively()
         File(a.cacheDir, "structures").deleteRecursively()
     }
+
+    /** Free space available to the app and the space used by its data. */
+    fun freeSpace(): Long = library.freeSpace()
+    fun appDataSize(): Long = a.filesDir.dirSize()
 
     fun cacheSize(): Long = File(a.filesDir, "pdfcache").dirSize()
 }
