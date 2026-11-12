@@ -100,6 +100,13 @@ class Prefs(ctx: Context) {
         writeRefs("bookmarks", _bookmarks.value)
     }
 
+    /** Puts a bookmark back at [index] (undo of a removal). */
+    fun insertBookmark(index: Int, ref: PageRef) {
+        val cur = _bookmarks.value.filterNot { it.label == ref.label && it.path == ref.path }
+        _bookmarks.value = cur.toMutableList().also { it.add(index.coerceIn(0, it.size), ref) }
+        writeRefs("bookmarks", _bookmarks.value)
+    }
+
     fun removeBookmarksOf(label: String) {
         _bookmarks.value = _bookmarks.value.filter { it.label != label }
         writeRefs("bookmarks", _bookmarks.value)

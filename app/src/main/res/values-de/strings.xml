@@ -206,4 +206,9 @@
     <string name="language_french">Français</string>
     <string name="language_german">Deutsch</string>
     <string name="language_portuguese">Português</string>
+    <string name="bookmarks_see_all">Alle anzeigen (%1$d)</string>
+    <string name="bookmark_removed">Lesezeichen entfernt</string>
+    <string name="undo">Rückgängig</string>
+    <string name="bookmarks_empty">Du hast noch keine Lesezeichen. Tippe beim Lesen einer Seite auf den Stern.</string>
+    <string name="bookmarks_filter">Lesezeichen filtern</string>
 </resources>

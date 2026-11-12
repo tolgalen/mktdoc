@@ -206,4 +206,9 @@
     <string name="language_french">Français</string>
     <string name="language_german">Deutsch</string>
     <string name="language_portuguese">Português</string>
+    <string name="bookmarks_see_all">Tout voir (%1$d)</string>
+    <string name="bookmark_removed">Signet retiré</string>
+    <string name="undo">Annuler</string>
+    <string name="bookmarks_empty">Vous n’avez pas encore de signets. Touchez l’étoile en lisant une page.</string>
+    <string name="bookmarks_filter">Filtrer les signets</string>
 </resources>

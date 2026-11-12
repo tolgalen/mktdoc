@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.semantics.heading
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -51,7 +53,7 @@ fun versionTitle(label: String): String = if (label == CHANGELOG) stringResource
 private data class Row(val label: String, val online: DocVersion?, val local: LocalVersion?)
 
 @Composable
-fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Unit, onSearch: () -> Unit, onPage: (PageRef) -> Unit) {
+fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Unit, onSearch: () -> Unit, onPage: (PageRef) -> Unit, onAllBookmarks: () -> Unit) {
     val recent by vm.prefs.recent.collectAsState()
     val bookmarks by vm.prefs.bookmarks.collectAsState()
     val online by vm.online.collectAsState()
@@ -87,6 +89,7 @@ fun HomeScreen(vm: MainViewModel, onOpen: (String) -> Unit, onSettings: () -> Un
             if (bookmarks.isNotEmpty()) item {
                 SectionCard(stringResource(R.string.bookmarks)) {
                     bookmarks.takeLast(8).reversed().forEach { PageRow(it, Icons.Default.Star, onPage) }
+                    TextButton(onAllBookmarks, shape = ButtonShape) { Text(stringResource(R.string.bookmarks_see_all, bookmarks.size)) }
                 }
             }
             if (rows.isEmpty() && !loading) item { Text(stringResource(R.string.no_versions), color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -378,6 +381,65 @@ fun CompareScreen(vm: MainViewModel, a: String, b: String, onBack: () -> Unit) {
                         if (result.isEmpty()) Text(stringResource(R.string.compare_none), Modifier.padding(top = 12.dp))
                     }
                     items(list, key = { it.key + it.kind }) { c -> ChangeItem(c) }
+                }
+            }
+        }
+    }
+}
+
+/** All bookmarks, grouped by version (newest first), with a text filter and removal with undo. */
+@Composable
+fun BookmarksScreen(vm: MainViewModel, onBack: () -> Unit, onOpen: (PageRef) -> Unit) {
+    val bookmarks by vm.prefs.bookmarks.collectAsState()
+    var q by rememberSaveable { mutableStateOf("") }
+    val snack = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val removedMsg = stringResource(R.string.bookmark_removed)
+    val undoLabel = stringResource(R.string.undo)
+    val shown = remember(bookmarks, q) {
+        val t = q.trim().lowercase()
+        bookmarks.filter { t.isEmpty() || it.title.lowercase().contains(t) || it.label.lowercase().contains(t) }.reversed()
+    }
+    val groups = shown.groupBy { it.label }.toSortedMap { x, y -> compareVersions(y, x) }
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text(stringResource(R.string.bookmarks)) }, navigationIcon = {
+                IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
+            })
+        },
+        snackbarHost = { SnackbarHost(snack) },
+    ) { pad ->
+        LazyColumn(Modifier.padding(pad).contentColumn().fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            item {
+                OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(stringResource(R.string.bookmarks_filter)) },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    trailingIcon = { if (q.isNotEmpty()) IconButton({ q = "" }) { Icon(Icons.Default.Clear, null) } })
+            }
+            if (bookmarks.isEmpty()) item { Text(stringResource(R.string.bookmarks_empty), Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            else if (shown.isEmpty()) item { Text(stringResource(R.string.no_results), Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            groups.forEach { (label, refs) ->
+                item(key = "h$label") {
+                    Text(versionTitle(label) + " · ${refs.size}", Modifier.padding(top = 12.dp).semantics { heading() },
+                        style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                }
+                items(refs, key = { it.label + "|" + it.path }) { r ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f).clickable { onOpen(r) }.padding(vertical = 6.dp)) {
+                            Text(r.title.ifBlank { r.path }, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(r.path.removeSuffix(".html"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+                        IconButton({
+                            val idx = bookmarks.indexOfFirst { it.label == r.label && it.path == r.path }
+                            vm.prefs.toggleBookmark(r)
+                            scope.launch {
+                                snack.currentSnackbarData?.dismiss()
+                                if (snack.showSnackbar(removedMsg, undoLabel, duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed)
+                                    vm.prefs.insertBookmark(idx, r)
+                            }
+                        }) { Icon(Icons.Default.Delete, stringResource(R.string.bookmark_remove)) }
+                    }
+                    HorizontalDivider()
                 }
             }
         }
