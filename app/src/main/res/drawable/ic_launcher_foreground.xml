@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Document with text lines and a download arrow. Safe zone: circle of radius 33; scaled to 80 %. -->
+<!-- Open book with a bookmark ribbon and a download badge. Everything is scaled to 86 % to stay inside the safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <group android:scaleX="0.8" android:scaleY="0.8" android:pivotX="54" android:pivotY="54">
-        <path android:fillColor="#E8EDF3" android:pathData="M33,26 L60,26 L72,38 L72,82 L33,82 Z" />
-        <path android:fillColor="#B7C2CF" android:pathData="M60,26 L60,38 L72,38 Z" />
-        <path android:strokeColor="#51606F" android:strokeWidth="2.2" android:strokeLineCap="round" android:pathData="M39,44 L58,44 M39,51 L66,51 M39,58 L66,58" />
-        <path android:fillColor="#EB5F27" android:pathData="M50,62 L58,62 L58,70 L64,70 L54,80 L44,70 L50,70 Z" />
+    <group android:scaleX="0.86" android:scaleY="0.86" android:pivotX="54" android:pivotY="54">
+        <group android:translateX="-4" android:translateY="-5">
+            <path android:fillColor="#FFFFFF" android:pathData="M22,42 Q38,35 54,42 L54,80 Q38,73 22,80 Z" />
+            <path android:fillColor="#FFE3D4" android:pathData="M54,42 Q70,35 86,42 L86,80 Q70,73 54,80 Z" />
+            <path android:strokeColor="#C7511F" android:strokeWidth="1.6" android:pathData="M54,42 L54,80" />
+            <path android:strokeColor="#C7511F" android:strokeWidth="2" android:strokeLineCap="round"
+                android:pathData="M29,52 Q38,49 47,52 M29,59 Q38,56 47,59 M29,66 Q38,63 47,66" />
+            <path android:fillColor="#0E2138" android:pathData="M66,35 L77,35 L77,58 L71.5,53 L66,58 Z" />
+        </group>
+        <path android:fillColor="#0E2138" android:pathData="M75,62 A11,11 0 1,1 75,84 A11,11 0 1,1 75,62 Z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M72.8,68.05 L77.2,68.05 L77.2,72.45 L80.5,72.45 L75,77.95 L69.5,72.45 L72.8,72.45 Z" />
     </group>
 </vector>
