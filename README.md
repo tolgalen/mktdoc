@@ -425,7 +425,7 @@ Requirements: the Android SDK with platform 37 and network access the first time
 wrapper is used; the Gradle daemon JVM is configured as JDK 25 (auto-provisioned) and the code targets Java 17.
 
 ```
-./gradlew assembleDebug            # app/build/outputs/apk/debug/mktdoc-v1.1.0-debug.apk
+./gradlew assembleDebug            # app/build/outputs/apk/debug/mktdoc-v1.1.1-debug.apk
 ./gradlew testDebugUnitTest        # unit tests
 ./gradlew lintDebug                # Android lint
 ./gradlew connectedDebugAndroidTest  # UI/integration tests on a device or emulator (it uninstalls the app afterwards,
