@@ -32,7 +32,7 @@
     <string name="export_zip">Export copy to ZIP</string>
     <string name="download">Download as HTML</string>
     <string name="redownload">Download again</string>
-    <string name="export_pdf">Export to PDF (online)</string>
+    <string name="export_pdf">Export to PDF</string>
     <string name="delete_copy">Delete offline copy</string>
     <string name="delete_confirm">The offline copy of version %1$s will be deleted.</string>
     <string name="changes_title">Changes in %1$s</string>
@@ -191,4 +191,15 @@
     <string name="err_wifi_only">"Wi-Fi only" is on and the current connection is metered.</string>
     <string name="storage">Storage</string>
     <string name="storage_desc">The app uses %1$s. Free space: %2$s.</string>
+    <string name="pdf_source">Source of the pages</string>
+    <string name="source_local">Offline copy (no network)</string>
+    <string name="source_online">Website (downloaded)</string>
+    <string name="compare_versions">Compare with another version…</string>
+    <string name="compare_with">Compare with…</string>
+    <string name="compare_title">%1$s → %2$s</string>
+    <string name="comparing">Comparing the two copies…</string>
+    <string name="compare_summary">From %1$s to %2$s: %3$d new, %4$d modified, %5$d removed.</string>
+    <string name="compare_none">No differences in the sections downloaded for both versions.</string>
+    <string name="filter_all">All</string>
+    <string name="kind_removed_short">Removed</string>
 </resources>

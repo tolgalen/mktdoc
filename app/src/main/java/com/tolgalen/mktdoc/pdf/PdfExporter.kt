@@ -12,6 +12,8 @@ import com.tolgalen.mktdoc.data.Reporter
 import com.tolgalen.mktdoc.data.Store
 import com.tolgalen.mktdoc.data.Structure
 import com.tolgalen.mktdoc.data.esc
+import com.tolgalen.mktdoc.data.normPath
+import com.tolgalen.mktdoc.net.Http
 import com.tolgalen.mktdoc.data.writeAtomic
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
@@ -20,6 +22,9 @@ import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPageContentStream
 import com.tom_roush.pdfbox.pdmodel.common.PDRectangle
 import com.tom_roush.pdfbox.pdmodel.font.PDType1Font
+import com.tom_roush.pdfbox.pdmodel.interactive.action.PDActionGoTo
+import com.tom_roush.pdfbox.pdmodel.interactive.action.PDActionURI
+import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitDestination
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem
@@ -44,10 +49,16 @@ class PdfGroup(val title: String, val fileName: String, val roots: List<Node>)
  * prints them with the WebView and merges the blocks, adding a cover, a contents page with page numbers,
  * bookmarks and a footer with the section and the page number.
  */
-class PdfExporter(private val ctx: Context, private val st: Structure, private val opts: PdfOptions, private val rep: Reporter) {
+class PdfExporter(
+    private val ctx: Context, private val st: Structure, private val opts: PdfOptions, private val rep: Reporter,
+    /** The offline copy to print from. When null the pages are downloaded from the website (and cached). */
+    private val localStore: Store? = null,
+) {
     private val label = st.version.label
     private val work = File(ctx.filesDir, "pdfcache/$label")
-    private val store = Store(work, File(work, "assets"))
+    private val store = localStore ?: Store(work, File(work, "assets"))
+    /** Where optimized images are written (never inside the offline copy). */
+    private val optRoot = if (localStore != null) File(work, "assets-opt") else store.assets
     private val printer = PdfPrinter(ctx)
 
     private fun s(es: String, en: String) = if (opts.lang == "es") es else en
@@ -58,15 +69,17 @@ class PdfExporter(private val ctx: Context, private val st: Structure, private v
         PDFBoxResourceLoader.init(ctx)
         val groups = groups(selected)
         val roots = groups.flatMap { it.roots }
-        // 1. pages (cached for 7 days)
-        store.load()
-        rep.log(s("Descargando las páginas…", "Downloading pages…"))
-        val res = Crawler(st, roots, store, store, CrawlOptions(maxAgeSec = 7 * 86400), rep.log, progress = { d, t -> rep.progress("pages", d, t) }).run()
-        store.manifest.putAll(res.pages); store.save()
-        if (res.failed.isNotEmpty()) rep.log(s("${res.failed.size} páginas no se pudieron descargar y se omiten.", "${res.failed.size} pages could not be downloaded and are skipped."))
+        // 1. pages: from the offline copy, or downloaded (cached for 7 days)
+        if (localStore == null) {
+            store.load()
+            rep.log(s("Descargando las páginas…", "Downloading pages…"))
+            val res = Crawler(st, roots, store, store, CrawlOptions(maxAgeSec = 7 * 86400), rep.log, progress = { d, t -> rep.progress("pages", d, t) }).run()
+            store.manifest.putAll(res.pages); store.save()
+            if (res.failed.isNotEmpty()) rep.log(s("${res.failed.size} páginas no se pudieron descargar y se omiten.", "${res.failed.size} pages could not be downloaded and are skipped."))
+        } else rep.log(s("Usando la copia sin conexión.", "Using the offline copy."))
         // 2. images
         rep.progress("images", 0, 0)
-        val imgMap = withContext(Dispatchers.IO) { ImageOptimizer.optimize(store.assets, opts.imageQuality) { false } }
+        val imgMap = withContext(Dispatchers.IO) { ImageOptimizer.optimize(store.assets, opts.imageQuality, optRoot) { false } }
         val imgDir = ImageOptimizer.dirName(opts.imageQuality)
         // 3. one PDF per group
         groups.forEachIndexed { gi, g ->
@@ -112,11 +125,16 @@ class PdfExporter(private val ctx: Context, private val st: Structure, private v
         html = Regex("""@ASSETS@/img/([^"'\s)]+)""").replace(html) { m ->
             val name = m.groupValues[1]
             val mapped = imgMap[name]
-            fileUrl(File(store.assets, if (mapped != null) "$imgDir/$mapped" else "img/$name")).toString()
+            fileUrl(if (mapped != null) File(optRoot, "$imgDir/$mapped") else File(store.assets, "img/$name"))
         }
         html = html.replace(ASSET_PREFIX, fileUrl(store.assets) + "/")
         val cls = "mk-page" + if (e.brk) " mk-break" else ""
-        return "<section class=\"$cls\"><span class=\"mk-self\">MKP${idx}X</span>$html</section>"
+        // The marker lives inside the first heading, so it moves to the next sheet together with it when the
+        // heading does not fit at the bottom of one (a separate block would be left behind: off-by-one in the contents).
+        val marker = "<span class=\"mk-self\">MKP${idx}X</span>"
+        val h1 = Regex("<h1\\b[^>]*>").find(html)
+        return if (h1 != null) "<section class=\"$cls\">" + html.substring(0, h1.range.last + 1) + marker + html.substring(h1.range.last + 1) + "</section>"
+        else "<section class=\"$cls\">${marker.replace("mk-self", "mk-self mk-blk")}$html</section>"
     }
 
     private fun docHtml(body: String, newSheet: Boolean): String =
@@ -240,6 +258,9 @@ class PdfExporter(private val ctx: Context, private val st: Structure, private v
         }
     }
 
+    /** Index of the exported page a website link points to (null if it is not part of this PDF). */
+    private fun internalTarget(uri: String, byRel: Map<String, Int>): Int? = linkTarget(uri, st.version.prefix, byRel)
+
     private fun latin(sIn: String): String = sIn.filter { it.code in 32..126 || it.code in 161..255 }
 
     private fun decorate(src: File, dst: File, entries: List<Entry>, starts: IntArray, frontSheets: Int) {
@@ -269,6 +290,22 @@ class PdfExporter(private val ctx: Context, private val st: Structure, private v
                     }
                 }
             }
+            // links to other exported pages jump inside the PDF instead of opening the website
+            val byRel = HashMap<String, Int>()
+            entries.forEachIndexed { i, e -> e.node.key?.let { byRel[it.removePrefix(st.version.prefix).ifEmpty { "/" }] = i } }
+            var internal = 0
+            for (pi in frontSheets until total) {
+                val links = try { doc.getPage(pi).annotations.filterIsInstance<PDAnnotationLink>() } catch (_: Exception) { continue }
+                for (link in links) {
+                    val uri = (link.action as? PDActionURI)?.uri ?: continue
+                    val idx = internalTarget(uri, byRel) ?: continue
+                    link.action = PDActionGoTo().also { g ->
+                        g.destination = PDPageFitDestination().also { it.page = doc.getPage((frontSheets + starts[idx]).coerceIn(0, total - 1)) }
+                    }
+                    internal++
+                }
+            }
+            rep.log(s("$internal enlaces internos.", "$internal internal links."))
             // hierarchical bookmarks
             val outline = PDDocumentOutline()
             doc.documentCatalog.documentOutline = outline
@@ -288,6 +325,18 @@ class PdfExporter(private val ctx: Context, private val st: Structure, private v
 
     companion object {
         const val MAX_PAGES_PER_BLOCK = 80
+
+        /**
+         * Index of the exported page a website link points to, or null when it is external or not part of the PDF.
+         * [byRel] maps each exported page's path (relative to the version [prefix]) to its index.
+         */
+        fun linkTarget(uri: String, prefix: String, byRel: Map<String, Int>): Int? {
+            val u = try { java.net.URI(uri) } catch (_: Exception) { return null }
+            if (u.host != Http.HOST) return null
+            val path = normPath(u.rawPath ?: return null)
+            for (p in listOf(prefix, "/docs")) if (path == p || path.startsWith("$p/")) return byRel[path.removePrefix(p).ifEmpty { "/" }]
+            return null
+        }
 
         /** Drops the selected sections that are already inside another selected one. */
         fun normalize(selected: List<Node>): List<Node> =
@@ -329,7 +378,8 @@ body.mk-pdf{background:#fff;color:#1c1e21;margin:0;font-family:sans-serif;line-h
 .mk-pdf td,.mk-pdf th{overflow-wrap:break-word;word-break:normal}
 .mk-pdf a,.mk-pdf code{overflow-wrap:anywhere}
 .mk-pdf img,.mk-pdf svg,.mk-pdf video{max-width:100%;height:auto}
-.mk-self{display:block;height:2px;font-size:2px;line-height:2px;color:#fdfdfd;overflow:hidden}
+.mk-self{display:inline-block;width:0;white-space:nowrap;font-size:1px;line-height:1px;color:#fefefe}
+.mk-self.mk-blk{display:block;width:auto;height:2px;overflow:hidden;break-after:avoid}
 .mk-pdf .mk-page.mk-break{break-before:page;margin-top:0!important;padding-top:0!important;border-top:none!important}
 .mk-pdf .mk-page:first-child{break-before:auto}
 .mk-pdf h1,.mk-pdf h2,.mk-pdf h3,.mk-pdf h4{break-after:avoid}

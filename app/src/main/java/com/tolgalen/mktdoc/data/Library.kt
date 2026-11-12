@@ -377,6 +377,59 @@ class Library(private val ctx: Context) {
         local(label)?.let { saveMeta(it.copy(pendingChanges = 0)) }
     }
 
+    // ------------------------------------------------------------------ compare two copies
+    private val versionBadge = Regex("^Version: \\d+(\\.\\d+)*$")
+
+    /** Titles of the top-level sections that have at least one downloaded page (null = the copy is complete). */
+    private fun heldSections(s: Store, st: Structure, partial: Boolean): Set<String>? =
+        if (!partial) null else st.roots.filter { r -> r.pages().any { it.key in s.manifest } }.map { it.title }.toSet()
+
+    /**
+     * Compares two downloaded versions page by page (paths relative to each version's prefix). Partial copies are only
+     * compared over the sections both hold. Results are ordered by path; [a] is the base and [b] the target:
+     * ADDED = only in [b], REMOVED = only in [a].
+     */
+    suspend fun compareVersions(a: String, b: String, progress: (Int, Int) -> Unit): List<PageChange> = withContext(Dispatchers.IO) {
+        val ma = local(a) ?: throw IllegalStateException("no local copy of $a")
+        val mb = local(b) ?: throw IllegalStateException("no local copy of $b")
+        val sa = store(a); val sb = store(b)
+        val sta = sa.loadStructure(); val stb = sb.loadStructure()
+        fun rel(k: String, p: String) = k.removePrefix(p).ifEmpty { "/" }
+        val pa = sa.manifest.mapKeys { rel(it.key, ma.prefix) }
+        val pb = sb.manifest.mapKeys { rel(it.key, mb.prefix) }
+        fun rootMap(st: Structure?, p: String): Map<String, String> {
+            val m = HashMap<String, String>()
+            st?.roots?.forEach { r -> r.pages().forEach { n -> n.key?.let { m[rel(it, p)] = r.title } } }
+            return m
+        }
+        val ra = rootMap(sta, ma.prefix); val rb = rootMap(stb, mb.prefix)
+        val ha = if (sta != null) heldSections(sa, sta, ma.partial) else null
+        val hb = if (stb != null) heldSections(sb, stb, mb.partial) else null
+        fun eligible(k: String): Boolean {
+            val root = ra[k] ?: rb[k] ?: return !ma.partial && !mb.partial
+            return (ha == null || root in ha) && (hb == null || root in hb)
+        }
+        val keys = (pa.keys + pb.keys).filter(::eligible).sorted()
+        val out = ArrayList<PageChange>()
+        keys.forEachIndexed { i, k ->
+            val x = pa[k]; val y = pb[k]
+            when {
+                x == null && y != null -> out.add(PageChange(k, y.title, ChangeKind.ADDED, emptyList(), emptyList()))
+                x != null && y == null -> out.add(PageChange(k, x.title, ChangeKind.REMOVED, emptyList(), emptyList()))
+                x != null && y != null && x.hash != y.hash -> {
+                    val la = lines(sa.readRaw(x)).filter { !versionBadge.matches(it) }
+                    val lb = lines(sb.readRaw(y)).filter { !versionBadge.matches(it) }
+                    val sA = la.toHashSet(); val sB = lb.toHashSet()
+                    val rem = la.filter { it !in sB }; val add = lb.filter { it !in sA }
+                    if (rem.isNotEmpty() || add.isNotEmpty()) out.add(PageChange(k, y.title, ChangeKind.MODIFIED, rem.take(40), add.take(40)))
+                }
+            }
+            if (i % 25 == 0) progress(i, keys.size)
+        }
+        progress(keys.size, keys.size)
+        out
+    }
+
     // ------------------------------------------------------------------ export
     /** Compresses the HTML site of a version into a ZIP (index.html at the root). */
     suspend fun exportZip(label: String, out: java.io.OutputStream, rep: Reporter) = withContext(Dispatchers.IO) {

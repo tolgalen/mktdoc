@@ -31,7 +31,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.Locale
 
-class TreeState(val loading: Boolean = false, val structure: Structure? = null, val error: String? = null, val label: String = "")
+class TreeState(val loading: Boolean = false, val structure: Structure? = null, val error: String? = null, val label: String = "", val local: Boolean = false)
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val a = app as MktdocApp
@@ -132,6 +132,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun delete(label: String) { library.delete(label); prefs.removeBookmarksOf(label); refreshLocal() }
 
+    // ------------------------------------------------------------------ compare versions
+    class CompareState(val a: String = "", val b: String = "", val done: Int = 0, val total: Int = 0,
+                       val result: List<com.tolgalen.mktdoc.data.PageChange>? = null, val error: String? = null)
+
+    private val _compare = MutableStateFlow(CompareState())
+    val compare: StateFlow<CompareState> = _compare
+    private var compareJob: kotlinx.coroutines.Job? = null
+
+    /** Compares two downloaded versions (the older one is the base). */
+    fun compareVersions(x: String, y: String) {
+        val (a, b) = if (com.tolgalen.mktdoc.data.compareVersions(x, y) <= 0) x to y else y to x
+        val cur = _compare.value
+        if (cur.a == a && cur.b == b && (cur.result != null || compareJob?.isActive == true)) return
+        compareJob?.cancel()
+        _compare.value = CompareState(a, b)
+        compareJob = viewModelScope.launch {
+            try {
+                val r = library.compareVersions(a, b) { d, t -> _compare.value = CompareState(a, b, d, t) }
+                _compare.value = CompareState(a, b, result = r)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _compare.value = CompareState(a, b, error = e.message ?: e.toString())
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ search
     private val _hits = MutableStateFlow<List<com.tolgalen.mktdoc.data.SearchHit>>(emptyList())
     val hits: StateFlow<List<com.tolgalen.mktdoc.data.SearchHit>> = _hits
@@ -164,11 +190,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------------ PDF
     private fun cachedStructureFile(label: String) = File(a.cacheDir, "structures/$label.json")
 
-    fun loadTree(v: DocVersion, forceOnline: Boolean = false) {
-        if (_tree.value.label == v.label && _tree.value.structure != null && !forceOnline) return
-        _tree.value = TreeState(loading = true, label = v.label)
+    /** Loads the section tree. With [local] it comes from the offline copy (no network). */
+    fun loadTree(v: DocVersion, forceOnline: Boolean = false, local: Boolean = false) {
+        if (_tree.value.label == v.label && _tree.value.structure != null && !forceOnline && _tree.value.local == local) return
+        _tree.value = TreeState(loading = true, label = v.label, local = local)
         viewModelScope.launch {
             try {
+                if (local) {
+                    val ls = withContext(Dispatchers.IO) { library.store(v.label).loadStructure() }
+                    _tree.value = if (ls != null) TreeState(structure = ls, label = v.label, local = true)
+                    else TreeState(error = "No stored structure", label = v.label, local = true)
+                    return@launch
+                }
                 var st: Structure? = null
                 if (!forceOnline) st = withContext(Dispatchers.IO) {
                     runCatching { Structure.fromJson(JSONObject(cachedStructureFile(v.label).readText())) }.getOrNull()
@@ -184,16 +217,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val s2 = st
                     withContext(Dispatchers.IO) { writeAtomic(cachedStructureFile(v.label), s2.toJson().toString()) }
                 }
-                _tree.value = TreeState(structure = st, label = v.label)
+                _tree.value = TreeState(structure = st, label = v.label, local = false)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                _tree.value = TreeState(error = e.message ?: e.toString(), label = v.label)
+                _tree.value = TreeState(error = e.message ?: e.toString(), label = v.label, local = local)
             }
         }
     }
 
     /** `treeUri`: chosen folder (one PDF per section); otherwise `docUri` is the single chosen file. */
-    fun exportPdf(v: DocVersion, selected: List<Node>, opts: PdfOptions, docUri: Uri?, treeUri: Uri?) {
+    fun exportPdf(v: DocVersion, selected: List<Node>, opts: PdfOptions, docUri: Uri?, treeUri: Uri?, local: Boolean = false) {
         val st = _tree.value.structure ?: return
         val o = opts.copy(lang = lang)
         prefs.savePdfOptions(o)
@@ -208,8 +241,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         Jobs.start(a, str(R.string.job_pdf, v.label)) { rep ->
             try {
-                requireNetwork()
-                PdfExporter(a, st, o, rep).export(selected, sink)
+                if (!local) requireNetwork()
+                val lstore = if (local) withContext(Dispatchers.IO) { library.store(v.label) } else null
+                PdfExporter(a, st, o, rep, lstore).export(selected, sink)
             } catch (e: Throwable) {
                 // the file chosen in the picker was created empty: do not leave it there
                 if (docUri != null) runCatching { DocumentsContract.deleteDocument(resolver, docUri) }

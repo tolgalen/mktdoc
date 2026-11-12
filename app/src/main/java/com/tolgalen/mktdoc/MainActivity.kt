@@ -60,7 +60,8 @@ private fun App(vm: MainViewModel) {
     when (kind) {
         "home" -> HomeScreen(vm, onOpen = { push("version:$it") }, onSettings = { push("settings") }, onSearch = { push("search:") },
             onPage = { r -> push("reader:${r.label}|${r.path}") })
-        "version" -> VersionScreen(vm, arg, onBack = ::pop, onRead = { push("reader:$arg") }, onSearch = { push("search:$arg") }, onSections = { push("download:$arg") }, onChanges = { push("changes:$arg") }, onPdf = { push("pdf:$arg") })
+        "version" -> VersionScreen(vm, arg, onBack = ::pop, onRead = { push("reader:$arg") }, onSearch = { push("search:$arg") }, onSections = { push("download:$arg") }, onCompare = { o -> push("compare:$arg|$o") }, onChanges = { push("changes:$arg") }, onPdf = { push("pdf:$arg") })
+        "compare" -> CompareScreen(vm, arg.substringBefore('|'), arg.substringAfter('|'), onBack = ::pop)
         "download" -> DownloadScreen(vm, arg, onBack = ::pop)
         "changes" -> ChangesScreen(vm, arg, onBack = ::pop)
         "pdf" -> PdfScreen(vm, arg, onBack = ::pop)

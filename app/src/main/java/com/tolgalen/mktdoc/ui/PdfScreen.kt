@@ -38,7 +38,7 @@ private class Opt<T>(val value: T, val label: Int)
 @Composable
 private fun <T> OptionGroup(title: String, options: List<Opt<T>>, selected: T, onSelect: (T) -> Unit) {
     Column {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        if (title.isNotEmpty()) Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         options.forEach { o ->
             Row(Modifier.fillMaxWidth().clickable { onSelect(o.value) }, verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected == o.value, { onSelect(o.value) })
@@ -58,7 +58,13 @@ fun PdfScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
     val job by Jobs.state.collectAsState()
     val version = if (label == CHANGELOG) changelogVersion() else online.firstOrNull { it.label == label }
         ?: DocVersion(label, if (label == online.firstOrNull { it.current }?.label) "/docs" else "/docs/$label")
-    LaunchedEffect(label) { vm.loadTree(version) }
+    val localVersions by vm.local.collectAsState()
+    val hasLocal = localVersions.any { it.label == label }
+    val hasOnline = label == CHANGELOG || online.any { it.label == label }
+    // source of the pages: the offline copy (default, no network) or the website
+    var useLocal by rememberSaveable { mutableStateOf(hasLocal) }
+    val fromLocal = if (!hasOnline) true else if (!hasLocal) false else useLocal
+    LaunchedEffect(label, fromLocal) { vm.loadTree(version, local = fromLocal) }
 
     var opts by remember { mutableStateOf(vm.prefs.pdfOptions("es")) }
     var filter by rememberSaveable { mutableStateOf("") }
@@ -70,10 +76,10 @@ fun PdfScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
     val byId = remember(st) { st?.roots?.flatMap { r -> r.walk().toList() }?.associateBy { nodeId(it) } ?: emptyMap() }
 
     val docLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
-        if (uri != null) { vm.exportPdf(version, pending, opts, uri, null); onBack() }
+        if (uri != null) { vm.exportPdf(version, pending, opts, uri, null, fromLocal); onBack() }
     }
     val treeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) { vm.exportPdf(version, pending, opts, null, uri); onBack() }
+        if (uri != null) { vm.exportPdf(version, pending, opts, null, uri, fromLocal); onBack() }
     }
     val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
@@ -102,7 +108,7 @@ fun PdfScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
         TopAppBar(title = { Text(stringResource(R.string.pdf_title, label)) }, navigationIcon = {
             IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
         }, actions = {
-            IconButton({ vm.loadTree(version, forceOnline = true) }, enabled = !tree.loading) { Icon(Icons.Default.Refresh, stringResource(R.string.reload_structure)) }
+            IconButton({ vm.loadTree(version, forceOnline = true) }, enabled = !tree.loading && !fromLocal) { Icon(Icons.Default.Refresh, stringResource(R.string.reload_structure)) }
         })
     }, bottomBar = {
         Surface(tonalElevation = 3.dp) {
@@ -116,6 +122,11 @@ fun PdfScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
         }
     }) { pad ->
         LazyColumn(Modifier.padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            item {
+                if (hasLocal && hasOnline) SectionCard(stringResource(R.string.pdf_source)) {
+                    OptionGroup("", listOf(Opt(true, R.string.source_local), Opt(false, R.string.source_online)), fromLocal) { useLocal = it; selected.clear() }
+                }
+            }
             item {
                 SectionCard(stringResource(R.string.pdf_options)) {
                     OptionGroup(stringResource(R.string.pdf_layout), listOf(Opt(PdfLayout.SINGLE, R.string.layout_single), Opt(PdfLayout.SECTION, R.string.layout_section)), opts.layout) { opts = opts.copy(layout = it) }

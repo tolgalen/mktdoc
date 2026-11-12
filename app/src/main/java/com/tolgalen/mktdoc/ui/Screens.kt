@@ -134,7 +134,7 @@ private fun VersionCard(r: Row, onClick: () -> Unit) {
 }
 
 @Composable
-fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: () -> Unit, onSearch: () -> Unit, onSections: () -> Unit, onChanges: () -> Unit, onPdf: () -> Unit) {
+fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: () -> Unit, onSearch: () -> Unit, onSections: () -> Unit, onCompare: (String) -> Unit, onChanges: () -> Unit, onPdf: () -> Unit) {
     val online by vm.online.collectAsState()
     val ok by vm.onlineOk.collectAsState()
     val local by vm.local.collectAsState()
@@ -142,6 +142,8 @@ fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: 
     val ov = if (label == CHANGELOG) changelogVersion() else online.firstOrNull { it.label == label }
     val lv = local.firstOrNull { it.label == label }
     var confirmDelete by remember { mutableStateOf(false) }
+    var pickCompare by remember { mutableStateOf(false) }
+    val others = local.filter { it.label != label && it.label != CHANGELOG }
     val zipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) vm.exportZip(label, uri)
     }
@@ -164,6 +166,7 @@ fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: 
                 if (lv != null) {
                     add(Tile(stringResource(R.string.open_offline), Icons.AutoMirrored.Filled.MenuBook, onRead, primary = true))
                     add(Tile(stringResource(R.string.search), Icons.Default.Search, onSearch))
+                    if (label != CHANGELOG && others.isNotEmpty()) add(Tile(stringResource(R.string.compare_versions), Icons.Default.CompareArrows, { pickCompare = true }))
                     if (lv.pendingChanges > 0) add(Tile(stringResource(R.string.view_changes, lv.pendingChanges), Icons.Default.Compare, onChanges))
                     add(Tile(stringResource(R.string.check_updates), Icons.Default.Sync, { vm.check(label) }, enabled = !busy && ok != false))
                     add(Tile(stringResource(R.string.export_zip), Icons.Default.FolderZip, { zipLauncher.launch("mktdoc-$label.zip") }, enabled = !busy))
@@ -171,13 +174,20 @@ fun VersionScreen(vm: MainViewModel, label: String, onBack: () -> Unit, onRead: 
                 if (ov != null) add(Tile(stringResource(if (lv == null) R.string.download else R.string.redownload), Icons.Default.Download,
                     { vm.download(ov) }, enabled = !busy && ok == true, primary = lv == null))
                 if (ov != null && label != CHANGELOG) add(Tile(stringResource(R.string.download_sections), Icons.Default.Checklist, onSections, enabled = !busy && ok == true))
-                if (ov != null || lv != null) add(Tile(stringResource(R.string.export_pdf), Icons.Default.PictureAsPdf, onPdf, enabled = !busy && ov != null))
+                if (ov != null || lv != null) add(Tile(stringResource(R.string.export_pdf), Icons.Default.PictureAsPdf, onPdf, enabled = !busy && (ov != null || lv != null)))
                 if (lv != null) add(Tile(stringResource(R.string.delete_copy), Icons.Default.Delete, { confirmDelete = true }, enabled = !busy, danger = true))
             }
             ActionGrid(tiles)
             if (ov == null && lv == null) Text(stringResource(R.string.no_versions))
         }
     }
+    if (pickCompare) AlertDialog(
+        onDismissRequest = { pickCompare = false },
+        title = { Text(stringResource(R.string.compare_with)) },
+        text = { Column { others.forEach { o -> TextButton({ pickCompare = false; onCompare(o.label) }, shape = ButtonShape) { Text(versionTitle(o.label)) } } } },
+        confirmButton = {},
+        dismissButton = { TextButton({ pickCompare = false }, shape = ButtonShape) { Text(stringResource(R.string.cancel)) } },
+    )
     if (confirmDelete) AlertDialog(
         onDismissRequest = { confirmDelete = false },
         title = { Text(stringResource(R.string.delete_copy)) },
@@ -223,7 +233,7 @@ fun ChangesScreen(vm: MainViewModel, label: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ChangeItem(c: PageChange) {
+fun ChangeItem(c: PageChange) {
     var open by remember { mutableStateOf(false) }
     val (icon, color, kind) = when (c.kind) {
         ChangeKind.ADDED -> Triple(Icons.Default.AddCircle, Palette.ok, stringResource(R.string.kind_added))
@@ -323,6 +333,49 @@ fun SearchScreen(vm: MainViewModel, only: String?, onBack: () -> Unit, onOpen: (
                             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
                     HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+/** Differences between two downloaded versions. */
+@Composable
+fun CompareScreen(vm: MainViewModel, a: String, b: String, onBack: () -> Unit) {
+    val st by vm.compare.collectAsState()
+    LaunchedEffect(a, b) { vm.compareVersions(a, b) }
+    val shown = if (st.a == a || st.a == b) st else MainViewModel.CompareState()
+    val result = shown.result
+    var only by rememberSaveable { mutableStateOf("") }
+    Scaffold(topBar = {
+        TopAppBar(title = { Text(stringResource(R.string.compare_title, shown.a.ifEmpty { a }, shown.b.ifEmpty { b })) }, navigationIcon = {
+            IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
+        })
+    }) { pad ->
+        when {
+            shown.error != null -> Box(Modifier.padding(pad).fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.structure_error, shown.error), color = MaterialTheme.colorScheme.error)
+            }
+            result == null -> Column(Modifier.padding(pad).fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
+                if (shown.total > 0) LinearProgressIndicator(progress = { shown.done.toFloat() / shown.total }, Modifier.fillMaxWidth())
+                else LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(stringResource(R.string.comparing), Modifier.padding(top = 12.dp))
+            }
+            else -> {
+                val list = result.filter { only.isEmpty() || it.kind.name == only }
+                LazyColumn(Modifier.padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        Text(stringResource(R.string.compare_summary, shown.a, shown.b, result.count { it.kind == ChangeKind.ADDED },
+                            result.count { it.kind == ChangeKind.MODIFIED }, result.count { it.kind == ChangeKind.REMOVED }), style = MaterialTheme.typography.titleSmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                            FilterChip(only.isEmpty(), { only = "" }, { Text(stringResource(R.string.filter_all)) })
+                            FilterChip(only == "ADDED", { only = if (only == "ADDED") "" else "ADDED" }, { Text(stringResource(R.string.kind_added)) })
+                            FilterChip(only == "MODIFIED", { only = if (only == "MODIFIED") "" else "MODIFIED" }, { Text(stringResource(R.string.kind_modified)) })
+                            FilterChip(only == "REMOVED", { only = if (only == "REMOVED") "" else "REMOVED" }, { Text(stringResource(R.string.kind_removed_short)) })
+                        }
+                        if (result.isEmpty()) Text(stringResource(R.string.compare_none), Modifier.padding(top = 12.dp))
+                    }
+                    items(list, key = { it.key + it.kind }) { c -> ChangeItem(c) }
                 }
             }
         }

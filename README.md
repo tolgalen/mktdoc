@@ -46,9 +46,12 @@ online, and can export the documentation to a ZIP or a PDF.
   notification, with an optional daily background check) and keeps your copy.
 - **Documentation changelog** (<https://manual.mikrotik.com/changelog>) as one more downloadable item.
 - **ZIP export** of the offline copy (a self-contained site, `index.html` at the root).
-- **PDF export of the online version** with the same options as the desktop app: sections and subsections,
+- **PDF export** (from your offline copy, without network, or from the website) with the same options as the desktop app: sections and subsections,
   one file or one per section, cover title and image, image quality, text size and page breaks. The PDF has a
-  cover, a contents page with page numbers, bookmarks and a footer with the section and page number.
+  cover, a contents page with page numbers, bookmarks, a footer with the section and page number, and links
+  between manual pages that jump inside the PDF.
+- **Compare two versions** you have downloaded (e.g. 7.25 → 7.26): new, modified and removed pages, with the
+  changed lines. Partial copies are compared over the sections both hold.
 - **Themes** like the rest of my apps: System, Dark, Dark blue, Black (OLED) and Light, plus 8 color palettes
   (mktdoc, Material Design, Ocean, Forest, Violet, Amber, Rose, Slate) and Material You dynamic colors.
 - English and Spanish interface (per-app language), settings grouped by category, open-source license screen.
@@ -129,7 +132,7 @@ Dark, Dark blue and Light (with the Ocean palette):
    *Apply changes* or *Discard*. If the version has disappeared from the website you are told, and the copy is
    kept.
 5. **Export copy to ZIP** to save the offline site as a file anywhere (the Android file picker is used).
-6. **Export to PDF (online)**: choose the options and the sections, then pick where to save the file (or a
+6. **Export to PDF**: choose the source (offline copy or website), the options and the sections, then pick where to save the file (or a
    folder when you want one file per section).
 7. **Settings** (gear icon) are grouped in *Appearance*, *Reading*, *Network and storage*, *Alerts*, *About* and
    *Licenses*.
@@ -302,10 +305,12 @@ folder that opens by double-clicking `index.html`.
 
 ### PDF export
 
-`PdfExporter` exports the **online** version (it works without an offline copy):
+`PdfExporter` can print from the **offline copy** (default when there is one: no network, no download) or from the
+**website** (it works without an offline copy):
 
-1. **Pages**: the chosen sections are downloaded with the same `Crawler`, into the PDF cache
-   (`filesDir/pdfcache/<label>`), and reused for 7 days without a request.
+1. **Pages**: from the offline copy's own `Store`, or, for the website source, the chosen sections are downloaded
+   with the same `Crawler` into the PDF cache (`filesDir/pdfcache/<label>`) and reused for 7 days without a
+   request. Optimized images always go to the PDF cache, never inside the offline copy.
 2. **Images**: `ImageOptimizer` rescales and re-encodes them according to the quality option (*Optimized*: max.
    1400 px, JPEG 82; *Smallest*: 1000 px, JPEG 65; *Original*: untouched). PNG/WebP become JPEG, transparency
    is flattened onto white, SVG is untouched.
@@ -317,13 +322,16 @@ folder that opens by double-clicking `index.html`.
    `PrintDocumentAdapter` **without showing a print dialog**. The adapter callbacks have non-public
    constructors, so a small shim in the `android.print` package (`PrintCallbacks.java`) subclasses them.
    A4 is requested with no margins; the page margins come from CSS `@page`.
-5. **Locating pages**: every manual page starts with a tiny, almost white marker (`MKP<index>X`). After a block
+5. **Locating pages**: every manual page has a tiny, almost white, zero-width marker (`MKP<index>X`) placed
+   *inside its first heading*, so it moves to the next sheet together with the heading. After a block
    is printed, PDFBox's text stripper finds on which sheet each marker is, giving the sheet where every manual
    page starts.
 6. **Contents**: printed twice. The first pass has placeholder numbers to learn how many sheets the contents
    need, the second one has the real numbers (cover + contents sheets + position of the page).
 7. **Merge and finish** (PDFBox-Android): cover, contents and blocks are merged; every sheet gets a footer with
-   its section and page number; a hierarchical outline (bookmarks) is added; the file is written to the
+   its section and page number; the printed `<a>` link annotations that point to another exported page are
+   rewritten from web (URI) links to jumps to that page's first sheet (links to anything else stay on the web);
+   a hierarchical outline (bookmarks) is added; the file is written to the
    destination chosen with the Storage Access Framework (one document, or one per section in a chosen folder).
    If anything fails, the empty file created by the picker is deleted.
 
@@ -380,14 +388,13 @@ serialization, the text hash used to detect changes and the search index.
 ## Design notes and limitations
 
 - **No database.** Plain files make the offline copy trivially exportable and inspectable.
-- **Whole versions only** are downloaded to the offline copy (sections can be chosen for the PDF). A download
-  that is cancelled halfway leaves the previous copy untouched; the next attempt downloads the pages again
-  (images already on disk are reused).
+- **Partial copies are top-level only**: you choose whole top-level sections (e.g. *CLI Reference*), not
+  individual pages. A download that is cancelled or fails keeps the pages already fetched (checkpoints) and the
+  next attempt resumes from them; the version stays usable meanwhile.
 - **Change detection is by content hash** of the page's visible text, so cosmetic differences in the markup do
   not count as changes, and neither do changed images.
-- **PDF links**: links between manual pages in the PDF point to the website, not to pages inside the PDF; the
-  contents page and bookmarks are the navigation. A page that starts at the very bottom of a sheet can show a
-  contents number one sheet off.
+- **PDF links**: links between exported pages jump to the *start* of the target page (not to the heading named in
+  the link's `#fragment`); the contents lines themselves are not clickable (the bookmarks are).
 - **Memory/time**: very large PDFs (thousands of pages) are slow on a phone and PDFBox keeps temporary files;
   choose *one file per section* for the complete manual.
 - Progress messages in the job dialog are in English; the rest of the interface follows the app language.

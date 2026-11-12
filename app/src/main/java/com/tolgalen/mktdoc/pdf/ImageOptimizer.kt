@@ -11,11 +11,11 @@ import java.io.FileOutputStream
 object ImageOptimizer {
     fun dirName(q: ImageQuality) = when (q) { ImageQuality.BALANCED -> "img-bal"; ImageQuality.SMALL -> "img-small"; ImageQuality.ORIGINAL -> "img" }
 
-    /** Returns original name -> optimized name (in `assets/<dirName>`). Untouched images are not listed. */
-    fun optimize(assets: File, q: ImageQuality, isCancelled: () -> Boolean): Map<String, String> {
+    /** Returns original name -> optimized name (in `<outRoot>/<dirName>`). Untouched images are not listed. */
+    fun optimize(assets: File, q: ImageQuality, outRoot: File = assets, isCancelled: () -> Boolean): Map<String, String> {
         if (q == ImageQuality.ORIGINAL) return emptyMap()
         val src = File(assets, "img")
-        val dst = File(assets, dirName(q)).also { it.mkdirs() }
+        val dst = File(outRoot, dirName(q)).also { it.mkdirs() }
         val maxW = if (q == ImageQuality.BALANCED) 1400 else 1000
         val quality = if (q == ImageQuality.BALANCED) 82 else 65
         val map = HashMap<String, String>()
