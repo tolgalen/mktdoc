@@ -21,6 +21,7 @@ online, and can export the documentation to a ZIP or a PDF.
   - [Discovery](#discovery-of-versions-and-structure) · [Download](#download-pipeline) · [Offline site](#offline-html-site)
   - [Checking for changes](#checking-for-changes-and-updating) · [Retired versions](#retired-versions)
   - [Changelog](#the-documentation-changelog) · [ZIP export](#zip-export) · [PDF export](#pdf-export)
+  - [Hardware guides](#the-hardware-guides) · [Background work](#background-work-and-alerts) · [App updates](#app-updates)
   - [Long operations](#long-operations-and-notifications) · [UI, state and theming](#ui-state-and-theming)
 - [Build and test](#build-and-test)
 - [Design notes and limitations](#design-notes-and-limitations)
@@ -94,9 +95,22 @@ progress dialog (it can be hidden or cancelled).
 
 ### Reading offline
 
-| Index and search | Page | Font size |
+| Index and search | Page | Options menu |
 |---|---|---|
-| <img src="docs/screenshots/reader_search.png" width="230"> | <img src="docs/screenshots/reader_page.png" width="230"> | <img src="docs/screenshots/reader_font.png" width="230"> |
+| <img src="docs/screenshots/reader_search.png" width="230"> | <img src="docs/screenshots/reader_page.png" width="230"> | <img src="docs/screenshots/reader_menu.png" width="230"> |
+
+| Opened from a search (words highlighted) | Find in page | Hardware category |
+|---|---|---|
+| <img src="docs/screenshots/reader_highlight.png" width="230"> | <img src="docs/screenshots/reader_find.png" width="230"> | <img src="docs/screenshots/hardware_category.png" width="230"> |
+
+The options menu has *Index*, *Open on the website*, *Share link* and the font size. A hardware category opens a
+page listing all its products, with a filter.
+
+### Search, bookmarks and comparing versions
+
+| Search | Bookmarks | Compare two versions |
+|---|---|---|
+| <img src="docs/screenshots/search_results.png" width="230"> | <img src="docs/screenshots/bookmarks_sheet.png" width="230"> | <img src="docs/screenshots/compare_versions.png" width="230"> |
 
 ### Checking for changes
 
@@ -130,9 +144,13 @@ Cover, contents with page numbers, and content pages with the section name and p
 
 ### Settings, themes and licenses
 
-| Settings | Appearance | Reading |
+| Settings | Appearance | Reading and bookmarks backup |
 |---|---|---|
 | <img src="docs/screenshots/settings.png" width="230"> | <img src="docs/screenshots/settings_appearance.png" width="230"> | <img src="docs/screenshots/settings_reading.png" width="230"> |
+
+| Alerts | About: updates and version history |
+|---|---|
+| <img src="docs/screenshots/settings_alerts.png" width="230"> | <img src="docs/screenshots/settings_about.png" width="230"> |
 
 | Licenses | GPL text |
 |---|---|
@@ -149,16 +167,17 @@ Dark, Dark blue and Light (with the Ocean palette):
 2. **Pick a version** and press **Download as HTML**. The app reads the manual structure, downloads every page
    with its images and builds the offline site. A foreground notification shows the progress.
 3. **Open documentation** to read it in the app. The **index** page has a search box (full text, all words must
-   match) and the whole table of contents. Inside a page you have breadcrumbs and previous/next links, and the
-   **Tt** button changes the font size.
+   match) and the whole table of contents. Inside a page you have breadcrumbs and previous/next links. The top bar
+   has a bookmark star, *find in page* and the global search; the ⋮ menu has the index, *Open on the website*,
+   *Share link* and the font size. The search icon on the home screen searches all your downloaded versions.
 4. **Check differences with the website** to compare your copy with what is online. Review the report, then
    *Apply changes* or *Discard*. If the version has disappeared from the website you are told, and the copy is
    kept.
 5. **Export copy to ZIP** to save the offline site as a file anywhere (the Android file picker is used).
 6. **Export to PDF**: choose the source (offline copy or website), the options and the sections, then pick where to save the file (or a
    folder when you want one file per section).
-7. **Settings** (gear icon) are grouped in *Appearance*, *Reading*, *Network and storage*, *Alerts*, *About* and
-   *Licenses*.
+7. **Settings** (gear icon) are grouped in *Appearance*, *Reading* (font size and bookmarks backup), *Network and
+   storage*, *Alerts*, *About* (updates from GitHub and version history) and *Licenses*.
 
 ## Architecture
 
@@ -185,7 +204,10 @@ flowchart LR
     HTTP -.-> WEB[("manual.mikrotik.com")]
     CRAWL --> STORE[("Store<br/>files on disk")]
     SITE --> STORE
-    WORK["work/VersionCheckWorker<br/>daily"] --> LIB
+    WORK["work/VersionCheckWorker (daily)<br/>work/ContentCheckWorker (weekly)"] --> LIB
+    UI --> UPD["data/Updates<br/>GitHub releases"]
+    UPD --> HTTP
+    UI --> SEARCH["data/Search<br/>search-index.js"]
 ```
 
 ### Packages
@@ -193,10 +215,10 @@ flowchart LR
 | Package | Responsibility |
 |---|---|
 | `net` | `Http`: single OkHttp client with a global requests-per-second limiter, retries (429/5xx and network errors with growing back-off) and manual redirect handling (the site redirects to `http://`, which is forced back to `https://`). |
-| `data` | `Discovery` (versions, sidebar menu, sitemap, changelog structure), `Crawler` (download, clean, cache), `Store` (files on disk), `SiteRenderer` (offline HTML site), `Library` (download / check / apply / ZIP / availability), `Model` (nodes, structure, versions), `Prefs`, `Licenses`. |
+| `data` | `Discovery` (versions, sidebar menu, sitemap, changelog structure), `Crawler` (download, clean, cache), `Store` (files on disk), `SiteRenderer` (offline HTML site), `Library` (download / check / apply / compare / ZIP / availability / outline), `Model` (nodes, structure, versions, collections), `Search` (native full-text search over the generated index), `Updates` (GitHub releases, verified download, installer intent), `Msg` (language of the progress messages), `Prefs` (settings, bookmarks, scroll positions), `Licenses`. |
 | `pdf` | `PdfOptions`, `ImageOptimizer`, `PdfPrinter` (prints HTML with the WebView), `PdfExporter` (assembles, prints, merges and decorates the PDF). |
-| `work` | `Jobs` (single long-running operation exposed as a `StateFlow` + the foreground `JobService`) and `VersionCheckWorker` (WorkManager, daily). |
-| `ui` | Compose screens (`Screens`, `PdfScreen`, `ReaderScreen`, `SettingsScreen`), shared components, `MainViewModel`, and `theme/` (color schemes, shapes). |
+| `work` | `Jobs` (single long-running operation exposed as a `StateFlow` + the foreground `JobService`) `VersionCheckWorker` (daily) and `ContentCheckWorker` (weekly) with WorkManager. |
+| `ui` | Compose screens (`Screens`, `DownloadScreen`, `PdfScreen`, `ReaderScreen` + `OutlinePanel`, `SettingsScreen`), shared components, `MainViewModel`, and `theme/` (color schemes, shapes). |
 | `android.print` | `PrintCallbacks.java`: tiny Java shim, see [PDF export](#pdf-export). |
 
 ### Data on disk
@@ -425,7 +447,7 @@ Requirements: the Android SDK with platform 37 and network access the first time
 wrapper is used; the Gradle daemon JVM is configured as JDK 25 (auto-provisioned) and the code targets Java 17.
 
 ```
-./gradlew assembleDebug            # app/build/outputs/apk/debug/mktdoc-v1.1.1-debug.apk
+./gradlew assembleDebug            # app/build/outputs/apk/debug/mktdoc-v1.1.2-debug.apk
 ./gradlew testDebugUnitTest        # unit tests
 ./gradlew lintDebug                # Android lint
 ./gradlew connectedDebugAndroidTest  # UI/integration tests on a device or emulator (it uninstalls the app afterwards,
