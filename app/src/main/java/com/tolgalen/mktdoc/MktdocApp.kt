@@ -5,6 +5,7 @@ import com.tolgalen.mktdoc.data.Library
 import com.tolgalen.mktdoc.data.Prefs
 import com.tolgalen.mktdoc.net.Http
 import com.tolgalen.mktdoc.work.Jobs
+import com.tolgalen.mktdoc.work.ContentCheckWorker
 import com.tolgalen.mktdoc.work.VersionCheckWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,7 @@ class MktdocApp : Application() {
         Http.maxRps = prefs.maxRps.value.toDouble()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scope.launch { prefs.maxRps.collect { Http.maxRps = it.toDouble() } }
+        scope.launch { prefs.backgroundContentCheck.collect { ContentCheckWorker.schedule(this@MktdocApp, it) } }
         scope.launch { prefs.periodicCheck.collect { VersionCheckWorker.schedule(this@MktdocApp, it) } }
     }
 }

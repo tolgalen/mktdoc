@@ -1,5 +1,6 @@
 package com.tolgalen.mktdoc.data
 
+import com.tolgalen.mktdoc.net.Http
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.parser.Parser
@@ -9,18 +10,19 @@ fun esc(s: String): String = s.replace("&", "&amp;").replace("<", "&lt;").replac
 
 /** Texts of the buttons and messages of the generated HTML site (the exported site does not depend on the app language). */
 class SiteLabels(val home: String, val search: String, val prev: String, val next: String, val theme: String,
-                 val results: String, val none: String, val filter: String, val title: String, val footer: String, val changelog: String, val hardware: String) {
+                 val results: String, val none: String, val filter: String, val title: String, val footer: String, val changelog: String, val hardware: String,
+                 val copy: String, val copied: String, val filterCat: String) {
     companion object {
         fun forLang(lang: String) = if (lang == "es") SiteLabels("Índice", "Buscar…", "Anterior", "Siguiente", "Cambiar tema",
-            "{n} resultados", "Sin resultados", "Buscar en toda la documentación…", "Manual de MikroTik RouterOS", "Copia sin conexión de manual.mikrotik.com", "Changelog de la documentación de MikroTik", "Guías de hardware de MikroTik")
+            "{n} resultados", "Sin resultados", "Buscar en toda la documentación…", "Manual de MikroTik RouterOS", "Copia sin conexión de manual.mikrotik.com", "Changelog de la documentación de MikroTik", "Guías de hardware de MikroTik", "Copiar", "Copiado", "Filtrar productos…")
         else SiteLabels("Index", "Search…", "Previous", "Next", "Toggle theme",
-            "{n} results", "No results", "Search the whole documentation…", "MikroTik RouterOS manual", "Offline copy of manual.mikrotik.com", "MikroTik documentation changelog", "MikroTik hardware guides")
+            "{n} results", "No results", "Search the whole documentation…", "MikroTik RouterOS manual", "Offline copy of manual.mikrotik.com", "MikroTik documentation changelog", "MikroTik hardware guides", "Copy", "Copied", "Filter products…")
     }
 }
 
 object SiteRenderer {
     /** Bumped when the generated site changes in a way that existing copies should be rebuilt (a hidden stamp file records it). */
-    const val RENDER_VERSION = 4
+    const val RENDER_VERSION = 5
     const val RENDER_STAMP = ".render-version"
 
     const val OFFLINE_CSS = """
@@ -51,7 +53,34 @@ img{max-width:100%;height:auto}
 [data-theme=dark] article img{background:#fff;border-radius:4px}
 table{display:block;overflow-x:auto;max-width:100%}
 pre{white-space:pre-wrap;word-break:break-word}
+#catf{width:100%;box-sizing:border-box;padding:.5rem .8rem;font-size:1rem;margin:.5rem 0 1rem;border:1px solid var(--mk-field);border-radius:6px;background:var(--mk-bg);color:var(--mk-fg)}
+.mk-codewrap{position:relative}
+.mk-copy{position:absolute;top:.3rem;right:.3rem;font-size:.75rem;padding:.15rem .5rem;border:1px solid var(--mk-border);border-radius:5px;background:var(--mk-bg);color:var(--mk-fg);opacity:.85;cursor:pointer}
+mark.mk-hl{background:#ffd54f;color:#000;border-radius:2px}
 """
+
+    /** Runs at the end of every content page: copy buttons on code blocks, highlight of searched words, scroll position for the app. */
+    const val PAGE_JS = """(function(){var C=window.MK_I18N||{};
+document.querySelectorAll('.mk-page pre').forEach(function(pre){
+var w=document.createElement('div');w.className='mk-codewrap';pre.parentNode.insertBefore(w,pre);w.appendChild(pre);
+var b=document.createElement('button');b.type='button';b.className='mk-copy';b.textContent=C.copy||'Copy';
+b.onclick=function(){var t=pre.innerText;if(window.MkBridge){MkBridge.copy(t)}else if(navigator.clipboard){navigator.clipboard.writeText(t)}
+b.textContent=C.copied||'Copied';setTimeout(function(){b.textContent=C.copy||'Copy'},1500)};w.appendChild(b)});
+var m=/[?&]hl=([^&]*)/.exec(location.search);
+if(m){var terms=decodeURIComponent(m[1].replace(/\+/g,' ')).toLowerCase().split(/\s+/).filter(function(x){return x.length>1});
+var root=document.querySelector('.mk-page');if(terms.length&&root){hl(root,terms);var f=document.querySelector('mark.mk-hl');if(f)f.scrollIntoView({block:'center'})}}
+function hl(root,terms){var re=new RegExp('('+terms.map(function(t){return t.replace(/[.*+?^()|\[\]\\{}]/g,'\\$&')}).join('|')+')','gi');
+var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null),nodes=[],n;
+while(n=w.nextNode()){var p=n.parentNode;if(p&&!/^(SCRIPT|STYLE|MARK|BUTTON)${'$'}/.test(p.nodeName)&&re.test(n.nodeValue))nodes.push(n);re.lastIndex=0}
+nodes.forEach(function(n){var fr=document.createDocumentFragment(),last=0,s=n.nodeValue;
+s.replace(re,function(x,g,i){fr.appendChild(document.createTextNode(s.slice(last,i)));var k=document.createElement('mark');k.className='mk-hl';k.textContent=x;fr.appendChild(k);last=i+x.length;return x});
+fr.appendChild(document.createTextNode(s.slice(last)));n.parentNode.replaceChild(fr,n)})}
+if(window.MkBridge&&MkBridge.scroll){var t=0;window.addEventListener('scroll',function(){var now=Date.now();if(now-t<800)return;t=now;MkBridge.scroll(window.scrollY/Math.max(1,document.documentElement.scrollHeight))},{passive:true})}
+})();"""
+
+    const val CATEGORY_FILTER_JS = """(function(){var f=document.getElementById('catf');if(!f)return;
+f.addEventListener('input',function(){var q=f.value.toLowerCase().trim();
+document.querySelectorAll('.mk-index li').forEach(function(li){var a=li.firstElementChild,t=((a&&a.textContent)||li.textContent).toLowerCase();li.style.display=(!q||t.indexOf(q)>=0)?'':'none'})})})();"""
 
     /** Runs in <head> before the first paint. Order: theme forced by the app, saved choice, system preference. */
     const val THEME_JS = """(function(){var K='mk-theme',d=document.documentElement,s=window.MK_FORCE||null;
@@ -147,8 +176,9 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
         return sb.append("</ul>").toString()
     }
 
-    private fun head(title: String, up: String, lang: String): String =
+    private fun head(title: String, up: String, lang: String, url: String? = null): String =
         "<!doctype html><html lang=\"$lang\" data-theme=\"light\"><head><meta charset=\"utf-8\">" +
+            (if (url != null) "<meta name=\"mk-url\" content=\"${esc(url)}\">" else "") +
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${esc(title)}</title>" +
             "<link rel=\"stylesheet\" href=\"${up}assets/site.css\"><style>$OFFLINE_CSS</style><script>$THEME_JS</script></head>"
 
@@ -178,6 +208,7 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
         }
         val label = st.version.label
         val siteTitle = when (label) { CHANGELOG -> l.changelog; HARDWARE -> l.hardware; else -> "${l.title} $label" }
+        val pageI18n = JSONObject().put("copy", l.copy).put("copied", l.copied)
         siteDir.mkdirs()
         // old pages are deleted (not the resources)
         siteDir.listFiles()?.forEach { if (it.name != "assets") it.deleteRecursively() }
@@ -211,12 +242,13 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
             val prev = order.getOrNull(i - 1); val next = order.getOrNull(i + 1)
             fun pager(x: Node?, text: String, right: Boolean): String =
                 if (x == null) "<span></span>" else "<a href=\"${esc(relPath(path, lm.getValue(x.key!!)))}\"${if (right) " style=\"text-align:right\"" else ""}>${if (right) "" else "« "}${esc(text)}: ${esc(x.title)}${if (right) " »" else ""}</a>"
-            val sb = StringBuilder(head("${meta.title} — $siteTitle", up, lang))
+            val sb = StringBuilder(head("${meta.title} — $siteTitle", up, lang, Http.BASE + n.key))
             sb.append("<body><div class=\"mk-wrap\">").append(top(up, l))
             if (crumb.isNotEmpty()) sb.append("<div class=\"mk-crumbs\">$crumb</div>")
             sb.append("<div class=\"mk-page\">").append(html).append("</div>")
             sb.append("<nav class=\"mk-pager\">").append(pager(prev, l.prev, false)).append(pager(next, l.next, true)).append("</nav>")
-            sb.append("<div class=\"mk-foot\">${esc(siteTitle)} · ${esc(l.footer)}</div></div></body></html>")
+            sb.append("<div class=\"mk-foot\">${esc(siteTitle)} · ${esc(l.footer)}</div></div>")
+            sb.append("<script>window.MK_I18N=$pageI18n;</script><script>$PAGE_JS</script></body></html>")
             val f = File(siteDir, path)
             f.parentFile?.mkdirs()
             f.writeText(sb.toString())
@@ -242,10 +274,12 @@ if(m){box.value=decodeURIComponent(m[1].replace(/\+/g,' '));run()}})();"""
         for ((k, path) in cats) {
             val node = order.first { it.key == k }
             val up = "../".repeat(path.count { it == '/' })
-            val sb = StringBuilder(head("${node.title} — $siteTitle", up, lang))
+            val sb = StringBuilder(head("${node.title} — $siteTitle", up, lang, Http.BASE + k))
             sb.append("<body><div class=\"mk-wrap\">").append(top(up, l))
-            sb.append("<div class=\"mk-page mk-index\"><h1>${esc(node.title)}</h1>").append(catList(node.children, path)).append("</div>")
-            sb.append("<div class=\"mk-foot\">${esc(siteTitle)} · ${esc(l.footer)}</div></div></body></html>")
+            sb.append("<div class=\"mk-page mk-index\"><h1>${esc(node.title)}</h1><input id=\"catf\" type=\"search\" placeholder=\"${esc(l.filterCat)}\" autocomplete=\"off\">")
+                .append(catList(node.children, path)).append("</div>")
+            sb.append("<div class=\"mk-foot\">${esc(siteTitle)} · ${esc(l.footer)}</div></div>")
+            sb.append("<script>$CATEGORY_FILTER_JS</script></body></html>")
             val f = File(siteDir, path)
             f.parentFile?.mkdirs()
             f.writeText(sb.toString())

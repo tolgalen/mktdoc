@@ -170,8 +170,23 @@ class Updates(private val ctx: Context) {
             list.filter { !it.prerelease && it.apkUrl != null && compareVersions(it.version, installed) > 0 }
                 .maxWithOrNull { x, y -> compareVersions(x.version, y.version) }
 
+        private val langMarker = Regex("<!--\\s*(en|es)\\s*-->")
+
+        /**
+         * The part of the release notes written in [lang] when the notes carry language sections (`<!-- en -->` and
+         * `<!-- es -->` lines; whatever comes before the first marker is shared); otherwise all of them.
+         */
+        fun notesFor(md: String, lang: String): String {
+            val marks = langMarker.findAll(md).toList()
+            if (marks.isEmpty()) return md
+            val sections = marks.mapIndexed { i, m -> m.groupValues[1] to md.substring(m.range.last + 1, marks.getOrNull(i + 1)?.range?.first ?: md.length) }
+            val wanted = (if (lang == "es") "es" else "en")
+            val body = sections.firstOrNull { it.first == wanted }?.second ?: sections.first().second
+            return md.substring(0, marks.first().range.first) + body
+        }
+
         /** Release notes as plain text: Markdown marks removed, list items with a bullet, checksum line dropped. */
-        fun plainNotes(md: String): String = md.replace("\r", "").lines()
+        fun plainNotes(md: String, lang: String = "en"): String = notesFor(md, lang).replace("\r", "").lines()
             .filter { !it.trimStart().startsWith("SHA-256", ignoreCase = true) && !it.trimStart().startsWith("sha256", ignoreCase = true) }
             .joinToString("\n") { l ->
                 var t = l.trimEnd()

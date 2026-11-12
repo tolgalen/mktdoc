@@ -53,10 +53,17 @@ online, and can export the documentation to a ZIP or a PDF.
 - **ZIP export** of the offline copy (a self-contained site, `index.html` at the root).
 - **PDF export** (from your offline copy, without network, or from the website) with the same options as the desktop app: sections and subsections,
   one file or one per section, cover title and image, image quality, text size and page breaks. The PDF has a
-  cover, a contents page with page numbers, bookmarks, a footer with the section and page number, and links
-  between manual pages that jump inside the PDF.
+  cover, a contents page with page numbers (each line is a link), bookmarks, a footer with the section and page
+  number, and links between manual pages that jump inside the PDF, to the section named in the link when it is known.
 - **Compare two versions** you have downloaded (e.g. 7.25 → 7.26): new, modified and removed pages, with the
   changed lines. Partial copies are compared over the sections both hold.
+- **Reading tools**: *find in page* (with match count), the scroll position of every page is remembered, a *Copy*
+  button on every code block, *Open on the website* and *Share link* for the current page, and the words you
+  searched for are highlighted when you open a result. The hardware category pages have a product filter.
+- **Alerts** (all optional): a RouterOS version that was not published before, a newer release of the app on
+  GitHub, and a weekly background check (Wi-Fi only) that tells you when a downloaded copy differs from the website
+  (nothing is applied automatically).
+- **Bookmarks backup**: export them to a JSON file and import them (merging, without duplicates) on another phone.
 - **App updates from GitHub** (About): shows the installed version, checks the repository's releases, lists the
   version history with each release's notes, and downloads and installs a newer release. The APK is verified
   (SHA-256 published with the release and the same signing certificate as the installed app) before the system
@@ -258,6 +265,11 @@ files.
 
 ### Offline HTML site
 
+Besides the pages, every page gets a small script (`PAGE_JS`): copy buttons on the code blocks, highlighting of the
+words in `?hl=`, and the scroll position, which the reader's WebView receives through a tiny `@JavascriptInterface`
+(`MkBridge`; only local pages are loaded in it, other links open in the browser). Each page also carries
+`<meta name="mk-url">` with its address on the website, used by *Open on the website* and *Share link*.
+
 `SiteRenderer` turns `raw/` into `site/`:
 
 - Files mirror the website path (`/docs/wireless/wifi` → `wireless/wifi.html`, or `…/index.html` when the page
@@ -374,6 +386,16 @@ Options (same as the desktop app): layout (single file / one per section), cover
 text size (extra small 70.7 %, small 85 %, normal), page breaks (continuous, new sheet per section, per section
 and subsection, each page) and the sections or subsections to include.
 
+### Background work and alerts
+
+Two WorkManager workers are scheduled from the settings. `VersionCheckWorker` (daily, any network) fetches the
+online versions, records the ones it has not seen before (`Prefs.registerOnlineVersions`; the first run only records,
+so installing the app does not announce every version), flags retired copies, and checks GitHub for a newer app
+release (notifying once per version). `ContentCheckWorker` (weekly, unmetered network, battery not low, off by
+default) runs the same difference check as the *Check differences* button on each downloaded copy within an
+8-minute budget and notifies how many changes are waiting; it never applies them and skips a copy that already has
+changes pending or an operation that is running.
+
 ### Long operations and notifications
 
 `Jobs` allows one long operation at a time (download, check, apply, ZIP, PDF). `Jobs.start` launches it in an
@@ -444,8 +466,9 @@ installed, so the deprecated `signatures` field is used as a fallback.
   next attempt resumes from them; the version stays usable meanwhile.
 - **Change detection is by content hash** of the page's visible text, so cosmetic differences in the markup do
   not count as changes, and neither do changed images.
-- **PDF links**: links between exported pages jump to the *start* of the target page (not to the heading named in
-  the link's `#fragment`); the contents lines themselves are not clickable (the bookmarks are).
+- **PDF links**: a link to a section of another exported page jumps to the *sheet* where that heading starts, not to
+  its exact position on the sheet. Headings without an `id` fall back to the start of the page. Links to pages
+  outside the PDF stay web links.
 - **Memory/time**: very large PDFs (thousands of pages) are slow on a phone and PDFBox keeps temporary files;
   choose *one file per section* for the complete manual.
 - Progress messages in the job dialog, the offline site's own labels and the PDF cover/contents texts are

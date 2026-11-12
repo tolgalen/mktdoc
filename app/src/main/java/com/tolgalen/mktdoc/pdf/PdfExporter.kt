@@ -30,7 +30,9 @@ import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitDestination
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem
+import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDBorderStyleDictionary
 import com.tom_roush.pdfbox.text.PDFTextStripper
+import com.tom_roush.pdfbox.text.TextPosition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -62,6 +64,8 @@ class PdfExporter(
     /** Where optimized images are written (never inside the offline copy). */
     private val optRoot = if (localStore != null) File(work, "assets-opt") else store.assets
     private val printer = PdfPrinter(ctx)
+    /** Ids of the headings of each exported page, in order; each one carries an invisible marker `MKH<page>H<n>X`. */
+    private val headingIds = HashMap<Int, List<String>>()
 
     private fun s(es: String, en: String) = if (opts.lang == "es") es else en
 
@@ -130,6 +134,17 @@ class PdfExporter(
             fileUrl(if (mapped != null) File(optRoot, "$imgDir/$mapped") else File(store.assets, "img/$name"))
         }
         html = html.replace(ASSET_PREFIX, fileUrl(store.assets) + "/")
+        // "#section" links inside the page become full website addresses of the page, which the finishing step turns into
+        // jumps to the section's sheet (the printer's own named destinations do not survive merging the blocks)
+        e.node.key?.let { k -> html = html.replace(Regex("""href="#([^"]*)""""), "href=\"" + Http.BASE + k + "#$1\"") }
+        // A marker inside every heading that has an id, to know on which sheet each section of the page ends up
+        // (links to "#section" then jump to the section's sheet instead of the start of the page).
+        val ids = ArrayList<String>()
+        html = Regex("<h[1-6]\\b([^>]*)>").replace(html) { m ->
+            val id = Regex("""\bid="([^"]*)"""").find(m.groupValues[1])?.groupValues?.get(1)
+            if (id == null) m.value else { ids.add(id); m.value + "<span class=\"mk-self\">MKH${idx}H${ids.size - 1}X</span>" }
+        }
+        headingIds[idx] = ids
         val cls = "mk-page" + if (e.brk) " mk-break" else ""
         // The marker lives inside the first heading, so it moves to the next sheet together with it when the
         // heading does not fit at the bottom of one (a separate block would be left behind: off-by-one in the contents).
@@ -148,7 +163,7 @@ class PdfExporter(
         val date = DateFormat.getDateInstance(DateFormat.LONG, Locale(opts.lang)).format(Date())
         val img = opts.coverImage?.let { copyCoverImage(it) }
         val banner = if (img != null) "<img class=\"cv-img\" src=\"${fileUrl(img)}\">"
-        else "<div class=\"cv-banner\"><span>MikroTik</span> RouterOS</div>"
+        else "<div class=\"cv-banner\"><span>MikroTik</span> ${when (label) { HARDWARE -> s("Hardware", "Hardware"); CHANGELOG -> s("Documentación", "Docs"); else -> "RouterOS" }}</div>"
         return "<div class=\"cover\">$banner<h1>${esc(title)}</h1><h2>${if (isDocSet(label)) "" else esc(s("Versión", "Version")) + " " + label}</h2>" +
             "<p>${esc(s("Copia en PDF de manual.mikrotik.com", "PDF copy of manual.mikrotik.com"))}<br>${esc(s("Impreso el", "Printed on"))} ${esc(date)}</p></div>"
     }
@@ -187,6 +202,7 @@ class PdfExporter(
         printer.print(File(blocksDir, "cover.html"), coverFile)
 
         // content blocks
+        val headSheet = HashMap<String, Int>()            // "<page>#<n>" -> sheet of the n-th heading with an id
         val starts = IntArray(entries.size)               // sheet (within the content, 0-based) where each page starts
         val blockFiles = ArrayList<File>()
         var sheets = 0
@@ -200,9 +216,9 @@ class PdfExporter(
             printer.print(hf, pf)
             withContext(Dispatchers.IO) { hf.delete() }
             val found = withContext(Dispatchers.IO) { locateMarkers(pf, idxs) }
-            val count = found.second
-            idxs.forEach { starts[it] = sheets + (found.first[it] ?: 0) }
-            sheets += count
+            idxs.forEach { starts[it] = sheets + (found.pages[it] ?: 0) }
+            found.headings.forEach { (k, local) -> headSheet[k] = sheets + local }
+            sheets += found.total
             blockFiles.add(pf)
         }
 
@@ -232,31 +248,84 @@ class PdfExporter(
                 addSource(coverFile); addSource(tocFile); blockFiles.forEach { addSource(it) }
                 destinationFileName = merged.absolutePath
             }.mergeDocuments(MemoryUsageSetting.setupTempFileOnly())
-            decorate(merged, outFile, entries, starts, coverSheets + tocSheets)
+            decorate(merged, outFile, entries, starts, coverSheets + tocSheets, coverSheets, headSheet)
             merged.delete()
         }
     }
 
     private fun pageCount(f: File): Int = PDDocument.load(f).use { it.numberOfPages }
 
-    /** Sheet (0-based, within the block) where each page's marker appears, and the block's total sheets. */
-    private fun locateMarkers(pdf: File, idxs: List<Int>): Pair<Map<Int, Int>, Int> {
-        val found = HashMap<Int, Int>()
+    private class Located(val pages: Map<Int, Int>, val headings: Map<String, Int>, val total: Int)
+
+    /**
+     * Sheet (0-based, within the block) where each page's marker and each heading's marker appear, and the block's
+     * total sheets.
+     */
+    private fun locateMarkers(pdf: File, idxs: List<Int>): Located {
+        val pages = HashMap<Int, Int>(); val heads = HashMap<String, Int>()
         PDDocument.load(pdf, MemoryUsageSetting.setupTempFileOnly()).use { doc ->
             val n = doc.numberOfPages
-            if (idxs.size > 1) {
-                val re = Regex("""M\s*K\s*P\s*(\d+)\s*X""")
+            val wantHeads = idxs.sumOf { headingIds[it]?.size ?: 0 }
+            if (idxs.size > 1 || wantHeads > 0) {
+                val rePage = Regex("""M\s*K\s*P\s*(\d+)\s*X""")
+                val reHead = Regex("""M\s*K\s*H\s*(\d+)\s*H\s*(\d+)\s*X""")
                 val stripper = PDFTextStripper()
                 for (p in 1..n) {
                     stripper.startPage = p; stripper.endPage = p
-                    for (m in re.findAll(stripper.getText(doc))) {
+                    val text = stripper.getText(doc)
+                    for (m in rePage.findAll(text)) {
                         val id = m.groupValues[1].toIntOrNull() ?: continue
-                        if (id !in found) found[id] = p - 1
+                        if (id !in pages) pages[id] = p - 1
                     }
-                    if (found.size == idxs.size) break
+                    for (m in reHead.findAll(text)) heads.putIfAbsent(m.groupValues[1] + "#" + m.groupValues[2], p - 1)
+                    if (pages.size == idxs.size && heads.size >= wantHeads) break
                 }
             }
-            return found to n
+            return Located(pages, heads, n)
+        }
+    }
+
+    /** One line of text with its position (points, origin at the top left of the page). */
+    private class TextLines : PDFTextStripper() {
+        class Chunk(val x0: Float, val x1: Float, val y: Float, val h: Float)
+        val chunks = ArrayList<Chunk>()
+        override fun writeString(text: String, textPositions: MutableList<TextPosition>) {
+            if (textPositions.isEmpty() || text.isBlank()) return
+            chunks.add(Chunk(textPositions.minOf { it.xDirAdj }, textPositions.maxOf { it.xDirAdj + it.widthDirAdj }, textPositions[0].yDirAdj, textPositions.maxOf { it.heightDir }))
+        }
+    }
+
+    /**
+     * Makes every line of the contents pages a link to the page it lists. The lines are found in the printed PDF and
+     * matched to the entries in order (the contents heading, which is bigger, is skipped); if the counts do not
+     * match nothing is linked.
+     */
+    private fun addTocLinks(doc: PDDocument, firstSheet: Int, endSheet: Int, entries: List<Entry>, targetSheet: (Int) -> Int) {
+        class Row(val sheet: Int, var x0: Float, var x1: Float, val y: Float, var h: Float)
+        val rows = ArrayList<Row>()
+        for (pi in firstSheet until endSheet) {
+            val c = TextLines(); c.startPage = pi + 1; c.endPage = pi + 1; c.getText(doc)
+            for (ch in c.chunks.sortedBy { it.y }) {
+                val r = rows.lastOrNull { it.sheet == pi && Math.abs(it.y - ch.y) < 2.5f }
+                if (r != null) { r.x0 = minOf(r.x0, ch.x0); r.x1 = maxOf(r.x1, ch.x1); r.h = maxOf(r.h, ch.h) }
+                else rows.add(Row(pi, ch.x0, ch.x1, ch.y, ch.h))
+            }
+        }
+        if (rows.isEmpty()) return
+        val median = rows.map { it.h }.sorted()[rows.size / 2]
+        val lines = rows.filter { it.h <= median * 1.25f }            // the contents heading is bigger than the entries
+        if (lines.size != entries.size) { rep.log(s("Índice: no se pudieron enlazar sus líneas (${lines.size}/${entries.size}).", "Contents: its lines could not be linked (${lines.size}/${entries.size}).")); return }
+        val total = doc.numberOfPages
+        lines.forEachIndexed { i, r ->
+            val page = doc.getPage(r.sheet)
+            val pageH = (page.mediaBox ?: PDRectangle.A4).height
+            val link = PDAnnotationLink()
+            link.rectangle = PDRectangle(r.x0 - 2f, pageH - r.y - 0.25f * r.h, (r.x1 - r.x0) + 4f, 1.1f * r.h)
+            link.borderStyle = PDBorderStyleDictionary().also { it.width = 0f }
+            link.action = PDActionGoTo().also { g ->
+                g.destination = PDPageFitDestination().also { it.page = doc.getPage(targetSheet(i).coerceIn(0, total - 1)) }
+            }
+            val anns = page.annotations; anns.add(link); page.annotations = anns
         }
     }
 
@@ -265,9 +334,11 @@ class PdfExporter(
 
     private fun latin(sIn: String): String = sIn.filter { it.code in 32..126 || it.code in 161..255 }
 
-    private fun decorate(src: File, dst: File, entries: List<Entry>, starts: IntArray, frontSheets: Int) {
+    private fun decorate(src: File, dst: File, entries: List<Entry>, starts: IntArray, frontSheets: Int, coverSheets: Int, headSheet: Map<String, Int>) {
         PDDocument.load(src, MemoryUsageSetting.setupTempFileOnly()).use { doc ->
             val total = doc.numberOfPages
+            // the contents lines are read before the footers are drawn, so that they do not get mixed up
+            addTocLinks(doc, coverSheets, frontSheets, entries) { i -> frontSheets + starts[i] }
             // section of each content sheet
             val sectionOf = arrayOfNulls<String>(total)
             var ei = 0
@@ -301,8 +372,12 @@ class PdfExporter(
                 for (link in links) {
                     val uri = (link.action as? PDActionURI)?.uri ?: continue
                     val idx = internalTarget(uri, byRel) ?: continue
+                    // "#section": the sheet where that heading starts, when it is known; otherwise the start of the page
+                    val frag = runCatching { java.net.URI(uri).fragment }.getOrNull()
+                    val n = frag?.let { headingIds[idx]?.indexOf(it) } ?: -1
+                    val sheet = (if (n >= 0) headSheet["$idx#$n"] else null) ?: starts[idx]
                     link.action = PDActionGoTo().also { g ->
-                        g.destination = PDPageFitDestination().also { it.page = doc.getPage((frontSheets + starts[idx]).coerceIn(0, total - 1)) }
+                        g.destination = PDPageFitDestination().also { it.page = doc.getPage((frontSheets + sheet).coerceIn(0, total - 1)) }
                     }
                     internal++
                 }

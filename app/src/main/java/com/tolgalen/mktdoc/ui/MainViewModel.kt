@@ -86,6 +86,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (ok) {
                 val gone = library.refreshAvailability(v)
                 if (gone.isNotEmpty()) VersionCheckWorker.notifyGone(a, gone.map { it.label })
+                val fresh = prefs.registerOnlineVersions(v.map { it.label })
+                if (fresh.isNotEmpty() && prefs.notifyNewVersions.value) VersionCheckWorker.notifyNewVersions(a, fresh)
             }
             refreshLocal()
             _loading.value = false
@@ -172,6 +174,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     init { viewModelScope.launch(Dispatchers.IO) { runCatching { updates.cleanup(com.tolgalen.mktdoc.BuildConfig.VERSION_NAME) } } }
+
+    /** `es` or `en`: the language the release notes are shown in (they exist in these two). */
+    val notesLanguage: String get() = lang
 
     fun isUpdateDownloaded(r: com.tolgalen.mktdoc.data.AppRelease) = updates.isDownloaded(r)
 

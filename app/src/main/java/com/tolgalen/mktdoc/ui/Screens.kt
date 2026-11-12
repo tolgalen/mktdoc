@@ -312,7 +312,7 @@ fun JobDialog() {
 
 /** Full-text search over the downloaded versions (or one of them). */
 @Composable
-fun SearchScreen(vm: MainViewModel, only: String?, onBack: () -> Unit, onOpen: (PageRef) -> Unit) {
+fun SearchScreen(vm: MainViewModel, only: String?, onBack: () -> Unit, onOpen: (PageRef, String) -> Unit) {
     var q by rememberSaveable { mutableStateOf("") }
     val hits by vm.hits.collectAsState()
     val bookmarks by vm.prefs.bookmarks.collectAsState()
@@ -332,18 +332,18 @@ fun SearchScreen(vm: MainViewModel, only: String?, onBack: () -> Unit, onOpen: (
             if (q.trim().length < 2) {
                 if (bookmarks.isNotEmpty()) {
                     item { Text(stringResource(R.string.bookmarks), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp)) }
-                    items(bookmarks.filter { only == null || it.label == only }.reversed(), key = { "b" + it.label + it.path }) { PageRow(it, Icons.Default.Star, onOpen) }
+                    items(bookmarks.filter { only == null || it.label == only }.reversed(), key = { "b" + it.label + it.path }) { PageRow(it, Icons.Default.Star) { r -> onOpen(r, "") } }
                 }
                 if (recent.isNotEmpty()) {
                     item { Text(stringResource(R.string.recent), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp)) }
-                    items(recent.filter { only == null || it.label == only }, key = { "r" + it.label + it.path }) { PageRow(it, Icons.Default.History, onOpen) }
+                    items(recent.filter { only == null || it.label == only }, key = { "r" + it.label + it.path }) { PageRow(it, Icons.Default.History) { r -> onOpen(r, "") } }
                 }
             } else if (hits.isEmpty()) {
                 item { Text(stringResource(R.string.no_results), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             } else {
                 item { Text(stringResource(R.string.n_results, hits.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(hits, key = { it.label + it.path }) { h ->
-                    Column(Modifier.fillMaxWidth().clickable { onOpen(PageRef(h.label, h.path, h.title)) }.padding(vertical = 6.dp)) {
+                    Column(Modifier.fillMaxWidth().clickable { onOpen(PageRef(h.label, h.path, h.title), q) }.padding(vertical = 6.dp)) {
                         Text(h.title, fontWeight = FontWeight.SemiBold)
                         Text((if (only == null) "${versionTitle(h.label)} · " else "") + h.crumbs, style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)

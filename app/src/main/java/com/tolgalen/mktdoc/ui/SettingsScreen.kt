@@ -42,6 +42,7 @@ import com.tolgalen.mktdoc.R
 import com.tolgalen.mktdoc.data.*
 import com.tolgalen.mktdoc.ui.theme.paletteSwatch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Reader text sizes (% of normal) and their names. */
@@ -168,6 +169,31 @@ private fun AppearanceGroup(vm: MainViewModel) {
 @Composable
 private fun ReadingGroup(vm: MainViewModel) {
     val zoom by vm.prefs.readerZoom.collectAsState()
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch {
+            val n = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { ctx.contentResolver.openOutputStream(uri, "w")!!.use { it.write(vm.prefs.bookmarksJson().toByteArray()) }; vm.prefs.bookmarks.value.size }.getOrNull()
+            }
+            android.widget.Toast.makeText(ctx, if (n != null) ctx.getString(R.string.bookmarks_exported, n) else ctx.getString(R.string.bookmarks_file_error), android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val n = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { ctx.contentResolver.openInputStream(uri)!!.use { String(it.readBytes()) } }.getOrNull()?.let { vm.prefs.importBookmarks(it) }
+            }
+            android.widget.Toast.makeText(ctx, if (n != null) ctx.getString(R.string.bookmarks_imported, n) else ctx.getString(R.string.bookmarks_file_error), android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+    SectionCard(stringResource(R.string.bookmarks)) {
+        Text(stringResource(R.string.bookmarks_backup_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton({ exporter.launch("mktdoc-bookmarks.json") }, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.bookmarks_export)) }
+            OutlinedButton({ importer.launch(arrayOf("application/json", "text/plain", "*/*")) }, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.bookmarks_import)) }
+        }
+    }
     SectionCard(stringResource(R.string.reader_font)) {
         Text(stringResource(R.string.reader_font_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         for ((pct, res) in readerSizes) {
@@ -233,6 +259,25 @@ private fun AlertsGroup(vm: MainViewModel) {
                 Text(stringResource(R.string.periodic_check_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Switch(periodic, null)
+        }
+        val newVersions by vm.prefs.notifyNewVersions.collectAsState()
+        val appUpdates by vm.prefs.notifyAppUpdates.collectAsState()
+        val bgContent by vm.prefs.backgroundContentCheck.collectAsState()
+        @Composable
+        fun option(title: Int, desc: Int, value: Boolean, enabled: Boolean, set: (Boolean) -> Unit) {
+            Row(Modifier.switchRow(value, set), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(title))
+                    Text(stringResource(desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(value, null, enabled = enabled)
+            }
+        }
+        option(R.string.setting_new_versions, R.string.setting_new_versions_desc, newVersions && periodic, periodic) { vm.prefs.setNotifyNewVersions(it) }
+        option(R.string.setting_app_updates, R.string.setting_app_updates_desc, appUpdates && periodic, periodic) { vm.prefs.setNotifyAppUpdates(it) }
+        option(R.string.setting_content_check, R.string.setting_content_check_desc, bgContent, true) {
+            vm.prefs.setBackgroundContentCheck(it)
+            if (it && android.os.Build.VERSION.SDK_INT >= 33) notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 }
@@ -403,7 +448,7 @@ private fun ReleaseHistoryCard(vm: MainViewModel) {
                     Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null)
                 }
                 if (open) {
-                    Text(com.tolgalen.mktdoc.data.Updates.plainNotes(r.body), Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall)
+                    Text(com.tolgalen.mktdoc.data.Updates.plainNotes(r.body, vm.notesLanguage), Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall)
                     if (r.htmlUrl.isNotEmpty()) TextButton({ runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(r.htmlUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } },
                         shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.release_open_github)) }
                 }

@@ -54,4 +54,15 @@ class UpdatesTest {
         val t = Updates.plainNotes(md)
         assertEquals("mktdoc 1.0.0\n\nFirst release.\n\nHighlights\n• Offline HTML site", t)
     }
+
+    @Test fun notesAreChosenByLanguageWhenTheyHaveSections() {
+        val md = "Common line\n<!-- en -->\n# mktdoc 2.0\n- New thing\n<!-- es -->\n# mktdoc 2.0\n- Algo nuevo\n"
+        assertEquals("Common line\n\nmktdoc 2.0\n• New thing", Updates.plainNotes(md, "en"))
+        assertEquals("Common line\n\nmktdoc 2.0\n• Algo nuevo", Updates.plainNotes(md, "es"))
+        assertEquals("Common line\n\nmktdoc 2.0\n• New thing", Updates.plainNotes(md, "fr"))      // other languages use English
+    }
+
+    @Test fun notesWithoutSectionsAreShownWhole() {
+        assertEquals("First release.", Updates.plainNotes("First release.", "es"))
+    }
 }

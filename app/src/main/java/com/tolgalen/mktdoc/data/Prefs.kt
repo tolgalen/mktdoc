@@ -25,8 +25,8 @@ enum class ThemeMode { SYSTEM, DARK, NAVY, BLACK, LIGHT }
 enum class ThemePalette { MKTDOC, MATERIAL, OCEAN, FOREST, VIOLET, AMBER, ROSE, SLATE }
 
 /** App settings (SharedPreferences). */
-class Prefs(ctx: Context) {
-    private val sp = ctx.applicationContext.getSharedPreferences("mktdoc", Context.MODE_PRIVATE)
+class Prefs(ctx: Context, name: String = "mktdoc") {
+    private val sp = ctx.applicationContext.getSharedPreferences(name, Context.MODE_PRIVATE)
 
     private val _theme = MutableStateFlow(
         runCatching { ThemeMode.valueOf(sp.getString("theme", ThemeMode.DARK.name)!!) }.getOrDefault(ThemeMode.DARK))
@@ -56,6 +56,35 @@ class Prefs(ctx: Context) {
     val wifiOnly: StateFlow<Boolean> = _wifiOnly
     fun setWifiOnly(v: Boolean) { _wifiOnly.value = v; sp.edit().putBoolean("wifi_only", v).apply() }
 
+    /** Notify when the website publishes a RouterOS version that was not in the list before. */
+    private val _notifyNew = MutableStateFlow(sp.getBoolean("notify_new_versions", true))
+    val notifyNewVersions: StateFlow<Boolean> = _notifyNew
+    fun setNotifyNewVersions(v: Boolean) { _notifyNew.value = v; sp.edit().putBoolean("notify_new_versions", v).apply() }
+
+    /** Notify when a newer release of the app is published on GitHub. */
+    private val _notifyApp = MutableStateFlow(sp.getBoolean("notify_app_updates", true))
+    val notifyAppUpdates: StateFlow<Boolean> = _notifyApp
+    fun setNotifyAppUpdates(v: Boolean) { _notifyApp.value = v; sp.edit().putBoolean("notify_app_updates", v).apply() }
+
+    /** Once a week, on Wi-Fi, look for changes in the downloaded copies (nothing is applied; the changes wait for review). */
+    private val _bgContent = MutableStateFlow(sp.getBoolean("bg_content_check", false))
+    val backgroundContentCheck: StateFlow<Boolean> = _bgContent
+    fun setBackgroundContentCheck(v: Boolean) { _bgContent.value = v; sp.edit().putBoolean("bg_content_check", v).apply() }
+
+    var lastNotifiedAppVersion: String?
+        get() = sp.getString("last_notified_app", null)
+        set(v) { sp.edit().putString("last_notified_app", v).apply() }
+
+    /**
+     * Remembers the RouterOS versions seen on the website and returns the ones that are new. The first call only records
+     * them (nothing to compare with), so installing the app does not announce every existing version.
+     */
+    fun registerOnlineVersions(labels: Collection<String>): List<String> {
+        val seen = sp.getStringSet("seen_versions", null)
+        sp.edit().putStringSet("seen_versions", labels.toSet() + (seen ?: emptySet())).apply()
+        return if (seen == null) emptyList() else labels.filter { it !in seen }
+    }
+
     private val _rps = MutableStateFlow(sp.getInt("rps", 10))
     val maxRps: StateFlow<Int> = _rps
     fun setMaxRps(v: Int) { _rps.value = v; sp.edit().putInt("rps", v).apply() }
@@ -77,6 +106,34 @@ class Prefs(ctx: Context) {
         sp.edit().putString("pdf_layout", o.layout.name).putString("pdf_title", o.coverTitle)
             .putString("pdf_image", o.coverImage?.toString()).putString("pdf_quality", o.imageQuality.name)
             .putString("pdf_text", o.textSize.name).putString("pdf_breaks", o.breaks.name).apply()
+    }
+
+    // ------------------------------------------------------------------ scroll position of the pages read
+    private val scroll = LinkedHashMap<String, Float>().also { m ->
+        runCatching {
+            val o = org.json.JSONObject(sp.getString("scroll", "{}")!!)
+            for (k in o.keys()) m[k] = o.getDouble(k).toFloat()
+        }
+    }
+    private var scrollDirty = 0
+
+    /** Fraction (0..1) of the page height the reader had scrolled to when it was last read, or null. */
+    fun scrollOf(label: String, path: String): Float? = synchronized(scroll) { scroll["$label|$path"] }
+
+    fun setScroll(label: String, path: String, fraction: Float) = synchronized(scroll) {
+        val k = "$label|$path"
+        scroll.remove(k)
+        if (fraction > 0.02f) scroll[k] = fraction
+        while (scroll.size > 300) scroll.remove(scroll.keys.first())
+        if (++scrollDirty >= 3) { scrollDirty = 0; persistScroll() }
+    }
+
+    /** Writes the positions now (when the reader is left). */
+    fun flushScroll() = synchronized(scroll) { scrollDirty = 0; persistScroll() }
+
+    private fun persistScroll() {
+        val o = org.json.JSONObject(); scroll.forEach { (k, v) -> o.put(k, v.toDouble()) }
+        sp.edit().putString("scroll", o.toString()).apply()
     }
 
     // ------------------------------------------------------------------ bookmarks and reading position
@@ -105,6 +162,24 @@ class Prefs(ctx: Context) {
         val cur = _bookmarks.value.filterNot { it.label == ref.label && it.path == ref.path }
         _bookmarks.value = cur.toMutableList().also { it.add(index.coerceIn(0, it.size), ref) }
         writeRefs("bookmarks", _bookmarks.value)
+    }
+
+    /** The bookmarks as a JSON document (to save them in a file). */
+    fun bookmarksJson(): String = org.json.JSONObject().put("app", "mktdoc")
+        .put("bookmarks", org.json.JSONArray().also { a -> _bookmarks.value.forEach { a.put(it.toJson()) } }).toString(2)
+
+    /** Adds the bookmarks of a file made by [bookmarksJson] that are not there yet. Returns how many were added, or null if it is not such a file. */
+    fun importBookmarks(text: String): Int? {
+        val refs = try {
+            val o = org.json.JSONObject(text)
+            if (o.optString("app") != "mktdoc") return null
+            val a = o.getJSONArray("bookmarks")
+            List(a.length()) { PageRef.fromJson(a.getJSONObject(it)) }
+        } catch (_: Exception) { return null }
+        val cur = _bookmarks.value
+        val add = refs.filter { r -> cur.none { it.label == r.label && it.path == r.path } }.distinctBy { it.label to it.path }
+        if (add.isNotEmpty()) { _bookmarks.value = cur + add; writeRefs("bookmarks", _bookmarks.value) }
+        return add.size
     }
 
     fun removeBookmarksOf(label: String) {

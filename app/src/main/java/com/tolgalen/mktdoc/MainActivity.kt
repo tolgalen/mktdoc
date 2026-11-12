@@ -71,9 +71,12 @@ private fun App(vm: MainViewModel) {
             val label = arg.substringBefore('|')
             val outline by produceState<List<com.tolgalen.mktdoc.data.OutlineNode>>(emptyList(), label) { value = vm.library.outline(label) }
             ReaderScreen(label, vm.library.indexFile(label), arg.substringAfter('|', "").ifEmpty { null }, zoom, vm.prefs::setReaderZoom,
-                bookmarks, vm.prefs::toggleBookmark, vm.prefs::pushRecent, onSearch = { push("search:$label") }, onBack = ::pop, outline = outline)
+                bookmarks, vm.prefs::toggleBookmark, vm.prefs::pushRecent, onSearch = { push("search:$label") }, onBack = ::pop, outline = outline,
+                scrollOf = vm.prefs::scrollOf, onScroll = vm.prefs::setScroll, onLeave = vm.prefs::flushScroll)
         }
-        "search" -> SearchScreen(vm, only = arg.ifEmpty { null }, onBack = ::pop, onOpen = { r -> push("reader:${r.label}|${r.path}") })
+        "search" -> SearchScreen(vm, only = arg.ifEmpty { null }, onBack = ::pop, onOpen = { r, q ->
+            push("reader:${r.label}|${r.path}" + if (q.trim().length > 1) "?hl=" + android.net.Uri.encode(q.trim()) else "")
+        })
         "settings" -> SettingsScreen(vm, onBack = ::pop)
     }
 }
