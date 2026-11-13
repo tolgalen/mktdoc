@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -44,6 +45,24 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.tolgalen.mktdoc.R
 import com.tolgalen.mktdoc.data.OutlineNode
 import com.tolgalen.mktdoc.data.PageRef
+import com.tolgalen.mktdoc.data.MlKitTranslator
+import com.tolgalen.mktdoc.data.matchShape
+import com.tolgalen.mktdoc.data.OnlineTranslator
+import com.tolgalen.mktdoc.data.PageTranslator
+import com.tolgalen.mktdoc.data.Prefs
+import com.tolgalen.mktdoc.data.TranslateEngine
+import com.tolgalen.mktdoc.data.TranslateException
+import com.tolgalen.mktdoc.data.TranslateJs
+import com.tolgalen.mktdoc.data.TranslateLangs
+import com.tolgalen.mktdoc.data.TranslationCache
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONArray
+import org.json.JSONObject
+import org.json.JSONTokener
+import kotlin.coroutines.resume
 import java.io.File
 
 /** Methods the offline pages can call (copy a code block, report the scroll position). Only local pages run in this WebView. */
@@ -76,6 +95,7 @@ fun ReaderScreen(
     scrollOf: (String, String) -> Float? = { _, _ -> null },
     onScroll: (String, String, Float) -> Unit = { _, _, _ -> },
     onLeave: () -> Unit = {},
+    prefs: Prefs? = null,
 ) {
     val ctx = LocalContext.current
     val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 840 && outline.isNotEmpty()
@@ -97,6 +117,62 @@ fun ReaderScreen(
     BackHandler(enabled = canGoBack || finding) { if (finding) { finding = false; web?.clearMatches() } else web?.goBack() }
     LaunchedEffect(theme, web) { web?.evaluateJavascript("document.documentElement.setAttribute('data-theme','$theme')", null) }
     DisposableEffect(Unit) { onDispose { onLeave() } }
+
+    // ---- page translation: the language stays active while navigating, each page is translated when it finishes loading
+    val scope = rememberCoroutineScope()
+    var trDialog by remember { mutableStateOf(false) }
+    var trTarget by remember { mutableStateOf<String?>(null) }
+    var trEngine by remember { mutableStateOf(TranslateEngine.OFFLINE) }
+    var trBusy by remember { mutableStateOf(false) }
+    var trJob by remember { mutableStateOf<Job?>(null) }
+    val trTargetNow = rememberUpdatedState(trTarget)
+    val trEngineNow = rememberUpdatedState(trEngine)
+    val cache = remember { TranslationCache(java.io.File(ctx.cacheDir, "translations")) }
+    val trErrorText = stringResource(R.string.translate_error)
+    val trModelText = stringResource(R.string.translate_model_error)
+    val trEmptyText = stringResource(R.string.translate_nothing)
+
+    fun translatePage(view: WebView, target: String, engine: TranslateEngine) {
+        val p = prefs ?: return
+        trJob?.cancel()
+        trJob = scope.launch {
+            trBusy = true
+            try {
+                val raw = suspendCancellableCoroutine<String?> { c -> view.evaluateJavascript(TranslateJs.COLLECT) { c.resume(it) } }
+                val json = (JSONTokener(raw ?: "null").nextValue() as? String) ?: "[]"
+                val arr = JSONArray(json)
+                val texts = List(arr.length()) { arr.getString(it) }
+                if (texts.isEmpty()) { Toast.makeText(ctx, trEmptyText, Toast.LENGTH_SHORT).show(); return@launch }
+                val cur = currentNow.value
+                val key = if (engine == TranslateEngine.ONLINE) "online:" + p.translateUrl.value else "offline"
+                val done = cur?.let { cache.get(key, it.label, it.path, target, texts) }
+                val out0 = done ?: run {
+                    val tr: PageTranslator = if (engine == TranslateEngine.ONLINE) OnlineTranslator(p.translateUrl.value, p.translateKey.value)
+                        else MlKitTranslator { p.wifiOnly.value }
+                    tr.translate(texts, target).also { r -> cur?.let { cache.put(key, it.label, it.path, target, texts, r) } }
+                }
+                val out = out0.mapIndexed { n, x -> matchShape(texts[n], x) }
+                var i = 0
+                while (i < out.size) {
+                    val part = out.subList(i, minOf(out.size, i + 60))
+                    view.evaluateJavascript("__mkSet($i,${JSONArray(part)})", null)
+                    i += part.size
+                }
+                trTarget = target; trEngine = engine
+            } catch (e: CancellationException) { throw e
+            } catch (e: TranslateException) {
+                Toast.makeText(ctx, if (e.message == "model") trModelText else trErrorText.format(e.message ?: ""), Toast.LENGTH_LONG).show()
+                trTarget = null
+            } catch (e: Exception) {
+                Toast.makeText(ctx, trErrorText.format(e.message ?: e.javaClass.simpleName), Toast.LENGTH_LONG).show()
+                trTarget = null
+            } finally { trBusy = false }
+        }
+    }
+    fun showOriginal() { trJob?.cancel(); trBusy = false; trTarget = null; web?.evaluateJavascript(TranslateJs.RESTORE, null) }
+    if (trDialog && prefs != null) TranslateDialog(prefs, { trDialog = false }) { target, engine ->
+        trDialog = false; trTarget = target; trEngine = engine; web?.let { translatePage(it, target, engine) }
+    }
 
     val findFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(finding) { if (finding) runCatching { findFocus.requestFocus() } }
@@ -132,6 +208,10 @@ fun ReaderScreen(
                                 runCatching { ctx.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                             }
                         })
+                        if (prefs != null) DropdownMenuItem(
+                            text = { Text(stringResource(if (trTarget != null) R.string.translate_show_original else R.string.translate_page)) },
+                            leadingIcon = { Icon(Icons.Default.Translate, null) },
+                            onClick = { menu = false; if (trTarget != null) showOriginal() else trDialog = true })
                         HorizontalDivider()
                         Text(stringResource(R.string.reader_font), Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
@@ -143,6 +223,15 @@ fun ReaderScreen(
                     }
                 }
             })
+            if (trTarget != null) Surface(tonalElevation = 2.dp) {
+                Column {
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(stringResource(R.string.translate_banner, TranslateLangs.name(trTarget!!, androidx.compose.ui.platform.LocalConfiguration.current.locales[0])), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
+                        TextButton({ showOriginal() }) { Text(stringResource(R.string.translate_original)) }
+                    }
+                    if (trBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            }
             if (finding) Surface(tonalElevation = 2.dp) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     OutlinedTextField(findQuery, { find(it) }, Modifier.weight(1f).focusRequester(findFocus), singleLine = true, placeholder = { Text(stringResource(R.string.find_hint)) },
@@ -193,6 +282,7 @@ fun ReaderScreen(
                             currentUrl = v?.trim('"')?.takeIf { it.startsWith("http") }
                         }
                         if (finding && findQuery.isNotBlank()) view.findAllAsync(findQuery)
+                        if (rel.endsWith(".html")) trTargetNow.value?.let { translatePage(view, it, trEngineNow.value) }
                     }
 
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

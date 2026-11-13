@@ -194,6 +194,7 @@ private fun ReadingGroup(vm: MainViewModel) {
             OutlinedButton({ importer.launch(arrayOf("application/json", "text/plain", "*/*")) }, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.bookmarks_import)) }
         }
     }
+    TranslationCard(vm)
     SectionCard(stringResource(R.string.reader_font)) {
         Text(stringResource(R.string.reader_font_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         for ((pct, res) in readerSizes) {
@@ -203,6 +204,56 @@ private fun ReadingGroup(vm: MainViewModel) {
             }
         }
     }
+}
+
+/** Page translation: the optional online server and the data kept for the on-device engine. */
+@Composable
+private fun TranslationCard(vm: MainViewModel) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val online by vm.prefs.translateOnline.collectAsState()
+    val url by vm.prefs.translateUrl.collectAsState()
+    val key by vm.prefs.translateKey.collectAsState()
+    var confirm by remember { mutableStateOf(false) }
+    var models by remember { mutableStateOf<List<String>?>(null) }
+    var saved by remember { mutableLongStateOf(0L) }
+    val cache = remember { TranslationCache(java.io.File(ctx.cacheDir, "translations")) }
+    LaunchedEffect(Unit) { models = MlKitTranslator().downloaded().filter { it != SOURCE_LANG }; saved = cache.size() }
+    SectionCard(stringResource(R.string.set_translate)) {
+        Text(stringResource(R.string.set_translate_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.switchRow(online) { if (it) confirm = true else vm.prefs.setTranslateOnline(false) }, verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.set_translate_online))
+                Text(stringResource(R.string.set_translate_online_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(online, null)
+        }
+        if (online) {
+            val bad = url.isNotBlank() && OnlineTranslator.endpoint(url) == null
+            OutlinedTextField(url, { vm.prefs.setTranslateUrl(it) }, Modifier.fillMaxWidth(), singleLine = true, isError = bad,
+                label = { Text(stringResource(R.string.set_translate_url)) }, placeholder = { Text("https://translate.example.org") },
+                supportingText = { if (bad) Text(stringResource(R.string.set_translate_url_invalid)) },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri))
+            OutlinedTextField(key, { vm.prefs.setTranslateKey(it) }, Modifier.fillMaxWidth(), singleLine = true,
+                label = { Text(stringResource(R.string.set_translate_key)) },
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+        }
+        HorizontalDivider()
+        val names = models?.joinToString(", ") { TranslateLangs.name(it) }.orEmpty()
+        Text(if (models.isNullOrEmpty()) stringResource(R.string.set_translate_no_models) else stringResource(R.string.set_translate_models, names),
+            style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton({ scope.launch { MlKitTranslator().deleteAll(); models = emptyList() } }, enabled = !models.isNullOrEmpty(),
+                shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.set_translate_delete_models)) }
+            OutlinedButton({ cache.clear(); saved = cache.size() }, enabled = saved > 0, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) {
+                Text(stringResource(R.string.set_translate_clear_saved))
+            }
+        }
+    }
+    if (confirm) AlertDialog({ confirm = false }, title = { Text(stringResource(R.string.set_translate_online)) },
+        text = { Text(stringResource(R.string.set_translate_online_confirm)) },
+        confirmButton = { TextButton({ vm.prefs.setTranslateOnline(true); confirm = false }, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.set_translate_online_allow)) } },
+        dismissButton = { TextButton({ confirm = false }, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable
@@ -300,7 +351,7 @@ private fun ContactRow(icon: ImageVector, label: String, value: String, onClick:
 
 @Composable
 private fun AboutGroup(vm: MainViewModel) {
-    var showGpl by remember { mutableStateOf(false) }
+    var showLicense by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     fun open(intent: Intent) { runCatching { ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
     SectionCard(stringResource(R.string.about)) {
@@ -318,12 +369,12 @@ private fun AboutGroup(vm: MainViewModel) {
         }
     }
     SectionCard(stringResource(R.string.license_title)) {
-        Text(stringResource(R.string.license_gpl_summary), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.license_summary), style = MaterialTheme.typography.bodyMedium)
         Text("© 2026 tolgalen", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(stringResource(R.string.license_gpl_warranty), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedButton({ showGpl = true }, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.lic_show_text)) }
+        Text(stringResource(R.string.license_warranty), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedButton({ showLicense = true }, shape = com.tolgalen.mktdoc.ui.theme.ButtonShape) { Text(stringResource(R.string.lic_show_text)) }
     }
-    if (showGpl) LicenseTextDialog(Licenses.GPL) { showGpl = false }
+    if (showLicense) LicenseTextDialog(Licenses.MKTDOC) { showLicense = false }
 }
 
 /** All the third-party components the app includes or uses, with their license; full texts open in a dialog. */

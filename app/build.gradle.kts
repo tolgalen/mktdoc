@@ -18,8 +18,8 @@ android {
         applicationId = "com.tolgalen.mktdoc"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.1.2"
+        versionCode = 5
+        versionName = "1.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -38,6 +38,8 @@ android {
 
     buildTypes {
         release {
+            // phones only: the x86 libraries of ML Kit weigh 17 MB each and only emulators use them (debug keeps them)
+            ndk { abiFilters += setOf("arm64-v8a", "armeabi-v7a") }
             signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
@@ -53,7 +55,10 @@ android {
         buildConfig = true
     }
     bundle { language { enableSplit = false } }
-    packaging { resources { excludes += setOf("META-INF/DEPENDENCIES", "META-INF/INDEX.LIST") } }
+    packaging {
+        resources { excludes += setOf("META-INF/DEPENDENCIES", "META-INF/INDEX.LIST") }
+        jniLibs { useLegacyPackaging = true }   // compressed native libraries: much smaller download
+    }
     lint {
         abortOnError = false
         checkReleaseBuilds = true
@@ -82,6 +87,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.jsoup)
     implementation(libs.pdfbox.android)
+    implementation(libs.mlkit.translate)
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)

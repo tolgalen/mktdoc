@@ -61,6 +61,13 @@ online, and can export the documentation to a ZIP or a PDF.
 - **Reading tools**: *find in page* (with match count), the scroll position of every page is remembered, a *Copy*
   button on every code block, *Open on the website* and *Share link* for the current page, and the words you
   searched for are highlighted when you open a result. The hardware category pages have a product filter.
+- **Page translation**: translate the open page from the reader menu into any of the ~58 languages of ML Kit. By
+  default it runs **on the device** (ML Kit Translation): the language model, about 30 MB per language, is
+  downloaded once from Google's servers and after that no text leaves the phone. Code blocks, inline code,
+  commands and paths are never translated. Optionally, an **online server compatible with the LibreTranslate API**
+  (https only, your own or a trusted one) can be configured and allowed in the settings; the text of the pages you
+  translate with it is sent to that server. The language stays active while you navigate, *Original* brings the
+  English text back, and finished translations are cached.
 - **Alerts** (all optional): a RouterOS version that was not published before, a newer release of the app on
   GitHub, and a weekly background check (Wi-Fi only) that tells you when a downloaded copy differs from the website
   (nothing is applied automatically).
@@ -152,9 +159,9 @@ Cover, contents with page numbers, and content pages with the section name and p
 |---|---|
 | <img src="docs/screenshots/settings_alerts.png" width="230"> | <img src="docs/screenshots/settings_about.png" width="230"> |
 
-| Licenses | GPL text |
+| Licenses | mktdoc license text |
 |---|---|
-| <img src="docs/screenshots/licenses.png" width="230"> | <img src="docs/screenshots/license_gpl.png" width="230"> |
+| <img src="docs/screenshots/licenses.png" width="230"> | <img src="docs/screenshots/license_text.png" width="230"> |
 
 Dark, Dark blue and Light (with the Ocean palette):
 
@@ -169,14 +176,14 @@ Dark, Dark blue and Light (with the Ocean palette):
 3. **Open documentation** to read it in the app. The **index** page has a search box (full text, all words must
    match) and the whole table of contents. Inside a page you have breadcrumbs and previous/next links. The top bar
    has a bookmark star, *find in page* and the global search; the ⋮ menu has the index, *Open on the website*,
-   *Share link* and the font size. The search icon on the home screen searches all your downloaded versions.
+   *Share link*, *Translate page* and the font size. The search icon on the home screen searches all your downloaded versions.
 4. **Check differences with the website** to compare your copy with what is online. Review the report, then
    *Apply changes* or *Discard*. If the version has disappeared from the website you are told, and the copy is
    kept.
 5. **Export copy to ZIP** to save the offline site as a file anywhere (the Android file picker is used).
 6. **Export to PDF**: choose the source (offline copy or website), the options and the sections, then pick where to save the file (or a
    folder when you want one file per section).
-7. **Settings** (gear icon) are grouped in *Appearance*, *Reading* (font size and bookmarks backup), *Network and
+7. **Settings** (gear icon) are grouped in *Appearance*, *Reading* (page translation, font size and bookmarks backup), *Network and
    storage*, *Alerts*, *About* (updates from GitHub and version history) and *Licenses*.
 
 ## Architecture
@@ -215,10 +222,10 @@ flowchart LR
 | Package | Responsibility |
 |---|---|
 | `net` | `Http`: single OkHttp client with a global requests-per-second limiter, retries (429/5xx and network errors with growing back-off) and manual redirect handling (the site redirects to `http://`, which is forced back to `https://`). |
-| `data` | `Discovery` (versions, sidebar menu, sitemap, changelog structure), `Crawler` (download, clean, cache), `Store` (files on disk), `SiteRenderer` (offline HTML site), `Library` (download / check / apply / compare / ZIP / availability / outline), `Model` (nodes, structure, versions, collections), `Search` (native full-text search over the generated index), `Updates` (GitHub releases, verified download, installer intent), `Msg` (language of the progress messages), `Prefs` (settings, bookmarks, scroll positions), `Licenses`. |
+| `data` | `Discovery` (versions, sidebar menu, sitemap, changelog structure), `Crawler` (download, clean, cache), `Store` (files on disk), `SiteRenderer` (offline HTML site), `Library` (download / check / apply / compare / ZIP / availability / outline), `Model` (nodes, structure, versions, collections), `Search` (native full-text search over the generated index), `Updates` (GitHub releases, verified download, installer intent), `Translate` (ML Kit and online engines, translation cache, the JavaScript that swaps the text nodes), `Msg` (language of the progress messages), `Prefs` (settings, bookmarks, scroll positions), `Licenses`. |
 | `pdf` | `PdfOptions`, `ImageOptimizer`, `PdfPrinter` (prints HTML with the WebView), `PdfExporter` (assembles, prints, merges and decorates the PDF). |
 | `work` | `Jobs` (single long-running operation exposed as a `StateFlow` + the foreground `JobService`) `VersionCheckWorker` (daily) and `ContentCheckWorker` (weekly) with WorkManager. |
-| `ui` | Compose screens (`Screens`, `DownloadScreen`, `PdfScreen`, `ReaderScreen` + `OutlinePanel`, `SettingsScreen`), shared components, `MainViewModel`, and `theme/` (color schemes, shapes). |
+| `ui` | Compose screens (`Screens`, `DownloadScreen`, `PdfScreen`, `ReaderScreen` + `OutlinePanel` + `TranslateDialog`, `SettingsScreen`), shared components, `MainViewModel`, and `theme/` (color schemes, shapes). |
 | `android.print` | `PrintCallbacks.java`: tiny Java shim, see [PDF export](#pdf-export). |
 
 ### Data on disk
@@ -461,7 +468,7 @@ For a signed release copy `keystore.properties.example` to `keystore.properties`
 git-ignored). `minSdk` is 29 (Android 10), `targetSdk` 36.
 
 Dependencies: Jetpack Compose + Material 3, AndroidX (activity, lifecycle, appcompat, WorkManager), OkHttp,
-jsoup, PDFBox-Android and kotlinx.coroutines. The unit tests (`app/src/test`) cover version comparison, path
+jsoup, PDFBox-Android, ML Kit Translation and kotlinx.coroutines. The unit tests (`app/src/test`) cover version comparison, path
 normalization, the local file mapping and relative links, the Docusaurus menu parser, structure
 serialization, the text hash used to detect changes, the search index and the PDF link mapping. The instrumented
 tests (`app/src/androidTest`) cover the reusable Compose components (action grid, accessible rows, the reader's
@@ -496,6 +503,11 @@ installed, so the deprecated `signatures` field is used as a fallback.
 - Progress messages in the job dialog, the offline site's own labels and the PDF cover/contents texts are
   available in English and Spanish only; the app interface has five languages. The translations other than
   English and Spanish were written without a native review, so corrections are welcome.
+- **Translation**: it is machine translation of the *text nodes* of a page, one by one, so a sentence split by inline
+  code or a link is translated in pieces and technical terms (bridge, firewall…) may be translated literally.
+  The source language is always English. Translating the PDF export is not supported. The cache lives in the app's
+  cache folder (the system may clear it) and can be cleared in the settings. The API key of the online server is
+  stored in the app's private preferences, unencrypted.
 - Release notes in the version history are shown as published on GitHub (English).
 - The app is independent and **not endorsed by MikroTik**. The documentation is MikroTik's content, downloaded
   for personal use.
@@ -504,16 +516,12 @@ installed, so the deprecated `signatures` field is used as a fallback.
 
 Copyright © 2026 tolgalen
 
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General
-Public License as published by the Free Software Foundation, either version 3 of the License, or (at your
-option) any later version.
+mktdoc is released under the [MIT License](LICENSE): you may use, copy, modify, merge, publish, distribute,
+sublicense and sell it, as long as the copyright notice and the permission notice are kept. It is provided "as is",
+without warranty of any kind.
 
-This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the
-implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
-more details.
-
-You should have received a copy of the GNU General Public License along with this program. If not, see
-<https://www.gnu.org/licenses/>. The full text is in [LICENSE](LICENSE).
+Versions 1.0.0 to 1.1.2 were published under the GNU General Public License v3 or later; whoever received them
+may keep using and redistributing those versions under that license. From version 1.2.0 on, the code is MIT.
 
 Third-party components (also shown in the app under *Settings › Licenses*):
 
@@ -524,6 +532,7 @@ Third-party components (also shown in the app under *Settings › Licenses*):
 | OkHttp, Okio | Apache 2.0 |
 | jsoup | MIT |
 | PDFBox-Android (port of Apache PDFBox) | Apache 2.0 |
+| ML Kit Translation (Google) | Proprietary: Android SDK Terms of Service and ML Kit Terms (not open source) |
 
 The documentation and changelog downloaded by the app are copyrighted content of MikroTik (SIA Mikrotikls) and are
 not part of this repository.

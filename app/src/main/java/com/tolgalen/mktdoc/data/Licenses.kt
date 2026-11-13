@@ -22,7 +22,7 @@ data class LicenseEntry(
 object Licenses {
     const val APACHE = "licenses/apache-2.0.txt"
     const val MIT = "licenses/mit.txt"
-    const val GPL = "licenses/gpl-3.0.txt"
+    const val MKTDOC = "licenses/mktdoc-mit.txt"
 
     val all = listOf(
         LicenseEntry(LicenseGroup.LIBRARY, "Jetpack Compose · Material 3 · iconos", "Apache License 2.0", "© The Android Open Source Project",
@@ -37,6 +37,8 @@ object Licenses {
             "https://jsoup.org", R.string.lic_jsoup, MIT),
         LicenseEntry(LicenseGroup.LIBRARY, "PDFBox-Android 2.0.27.0", "Apache License 2.0", "© The Apache Software Foundation · © Tom Roush (port a Android)",
             "https://github.com/TomRoush/PdfBox-Android", R.string.lic_pdfbox, APACHE),
+        LicenseEntry(LicenseGroup.LIBRARY, "ML Kit Translation 17.0.3", "Android SDK Terms of Service · ML Kit Terms", "© Google LLC",
+            "https://developers.google.com/ml-kit/language/translation", R.string.lic_mlkit),
         LicenseEntry(LicenseGroup.SERVICE, "manual.mikrotik.com", "Contenido de MikroTik", "© MikroTik (SIA Mikrotikls)",
             "https://manual.mikrotik.com", R.string.lic_mikrotik),
     )

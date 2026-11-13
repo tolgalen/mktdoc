@@ -108,6 +108,32 @@ class Prefs(ctx: Context, name: String = "mktdoc") {
             .putString("pdf_text", o.textSize.name).putString("pdf_breaks", o.breaks.name).apply()
     }
 
+    // ------------------------------------------------------------------ page translation
+    /** Language the pages are translated into. */
+    private val _trTarget = MutableStateFlow(sp.getString("translate_target", null) ?: TranslateLangs.default())
+    val translateTarget: StateFlow<String> = _trTarget
+    fun setTranslateTarget(v: String) { _trTarget.value = v; sp.edit().putString("translate_target", v).apply() }
+
+    private val _trEngine = MutableStateFlow(enumOf("translate_engine", TranslateEngine.OFFLINE))
+    val translateEngine: StateFlow<TranslateEngine> = _trEngine
+    fun setTranslateEngine(v: TranslateEngine) { _trEngine.value = v; sp.edit().putString("translate_engine", v.name).apply() }
+
+    /** The user allowed sending page text to the online server (off by default). */
+    private val _trOnline = MutableStateFlow(sp.getBoolean("translate_online", false))
+    val translateOnline: StateFlow<Boolean> = _trOnline
+    fun setTranslateOnline(v: Boolean) { _trOnline.value = v; sp.edit().putBoolean("translate_online", v).apply() }
+
+    private val _trUrl = MutableStateFlow(sp.getString("translate_url", "") ?: "")
+    val translateUrl: StateFlow<String> = _trUrl
+    fun setTranslateUrl(v: String) { _trUrl.value = v; sp.edit().putString("translate_url", v).apply() }
+
+    private val _trKey = MutableStateFlow(sp.getString("translate_key", "") ?: "")
+    val translateKey: StateFlow<String> = _trKey
+    fun setTranslateKey(v: String) { _trKey.value = v; sp.edit().putString("translate_key", v).apply() }
+
+    /** The online engine can be used: allowed and with a valid address. */
+    fun onlineReady() = _trOnline.value && OnlineTranslator.endpoint(_trUrl.value) != null
+
     // ------------------------------------------------------------------ scroll position of the pages read
     private val scroll = LinkedHashMap<String, Float>().also { m ->
         runCatching {
